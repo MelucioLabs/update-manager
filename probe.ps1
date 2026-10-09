@@ -1129,6 +1129,94 @@ if (-not (Test-Path $SelbstUpdate)) {
     } catch { Schlecht "update-config.json: selbstUpdate nicht lesbar" }
 }
 
+# ── 12. Protokoll-Ansicht und Ergebniskarte (protokoll-ansicht.ps1) ─────────
+#
+# Die Datei universal-update-manager.log bleibt chronologischer Text; die
+# Ansicht im Fenster ordnet nur um. Geprueft wird mit Text, nicht mit einer
+# echten Protokolldatei.
+$Ansicht = Join-Path $Ordner 'protokoll-ansicht.ps1'
+if (-not (Test-Path $Ansicht)) {
+    Schlecht "protokoll-ansicht.ps1 fehlt"
+} else {
+    $f = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseFile($Ansicht, [ref]$null, [ref]$f)
+    $kopf = [System.IO.File]::ReadAllBytes($Ansicht) | Select-Object -First 3
+    if ($f -and $f.Count -gt 0) { Schlecht "protokoll-ansicht.ps1 hat Syntaxfehler: $($f[0].Message)" }
+    elseif (-not ($kopf.Count -ge 3 -and $kopf[0] -eq 0xEF -and $kopf[1] -eq 0xBB -and $kopf[2] -eq 0xBF)) { Schlecht "protokoll-ansicht.ps1 hat KEIN BOM" }
+    else { Melde 'ok' "protokoll-ansicht.ps1 laesst sich parsen, mit BOM" }
+
+    $iss2 = Join-Path $Ordner 'installer\update-manager.iss'
+    if ((Test-Path $iss2) -and ((Get-Content $iss2 -Raw) -notmatch 'protokoll-ansicht\.ps1')) {
+        Schlecht "installer\update-manager.iss nimmt protokoll-ansicht.ps1 nicht mit - das Protokoll bliebe nach dem Setup unformatiert"
+    }
+
+    $ergebnisse2 = & {
+        . $Ansicht
+        $r = New-Object System.Collections.Generic.List[string]
+        function Pruefe($ok, $text) { if (-not $ok) { $r.Add($text) } }
+
+        $zeilen = @(
+            '[2026-10-07 04:00:01] [INFO] ========================================',
+            '[2026-10-07 04:00:01] [INFO] Silent Mode gestartet',
+            '[2026-10-07 04:00:02] [ERROR] Winget Zeit ueberschritten',
+            '   Fortsetzung der Fehlerzeile',
+            '[2026-10-07 04:05:00] [INFO] [SILENT-FAILED] Lauf nicht beendet',
+            '[2026-10-08 04:00:01] [INFO] ========================================',
+            '[2026-10-08 04:00:01] [INFO] Silent Mode gestartet',
+            '[2026-10-08 04:01:00] [WARNING] Rest offen: D',
+            '[2026-10-08 04:02:00] [SUCCESS] Aktualisiert: A, B (2 Updates)',
+            '[2026-10-08 04:02:30] [SUCCESS] Aktualisiert: C (1 Updates)',
+            '[2026-10-08 04:03:00] [GUI] [ERROR] Fenster meldet etwas',
+            '[2026-10-08 04:03:10] [INFO] [SILENT-DONE] Silent Mode beendet',
+            ''
+        )
+        $e = ConvertTo-ProtokollEintraege $zeilen
+        Pruefe (@($e).Count -eq 9) "Eintraege: $(@($e).Count) statt 9 (Trenner und Leerzeilen fallen weg, Fortsetzung haengt an)"
+        Pruefe ($e[1].Text -like "*Zeit ueberschritten*Fortsetzung der Fehlerzeile*") 'Fortsetzungszeile haengt nicht an der Zeile davor'
+        $gui = @($e | Where-Object { $_.Text -like 'Fenster meldet*' })[0]
+        Pruefe ($gui -and $gui.Stufe -eq 'ERROR') '[GUI] [ERROR]: die Stufe wird nicht erkannt'
+        $done = @($e | Where-Object { $_.Text -like '*SILENT-DONE*' })[0]
+        Pruefe ($done -and $done.Stufe -eq 'INFO') '[INFO] [SILENT-DONE]: Marke geht verloren'
+
+        $tage = Gruppiere-ProtokollTage $e
+        Pruefe (@($tage).Count -eq 2 -and $tage[0].Datum -eq '2026-10-08') 'neuester Tag steht nicht oben'
+        Pruefe ($tage[0].Eintraege[0].Zeit -eq '04:00' -and $tage[0].Eintraege[-1].Zeit -eq '04:03') 'Zeilen eines Tages nicht in zeitlicher Reihenfolge'
+        $nurF = Gruppiere-ProtokollTage $e -NurFehler
+        $anzF = (@($nurF | ForEach-Object { $_.Eintraege }) | Measure-Object).Count
+        Pruefe ($anzF -eq 2) "Filter Fehler liefert $anzF statt 2"
+        $z = Get-ProtokollZaehler $e
+        Pruefe ($z.Fehler -eq 2 -and $z.Warnungen -eq 1) "Zaehler: $($z.Fehler) Fehler, $($z.Warnungen) Warnungen"
+
+        Pruefe ((Get-LaufAnzahl $e) -eq 2) "Laufzaehler: $(Get-LaufAnzahl $e) statt 2 (ein FAILED, ein DONE)"
+        Pruefe ((Get-LaufAnzahl @()) -eq 0) 'Laufzaehler ohne Eintraege muss 0 sein'
+        $heute = [datetime]'2026-10-08 12:00'
+        Pruefe ((Get-TagesKopf '2026-10-08' $heute) -eq 'Heute, 8. Oktober 2026') "Tageskopf heute: $(Get-TagesKopf '2026-10-08' $heute)"
+        Pruefe ((Get-TagesKopf '2026-10-07' $heute) -eq 'Gestern, 7. Oktober 2026') 'Tageskopf gestern'
+        Pruefe ((Get-TagesKopf '2026-10-05' $heute) -like 'Montag, 5. Oktober 2026') "Tageskopf Wochentag: $(Get-TagesKopf '2026-10-05' $heute)"
+
+        # Ergebniskarte: die Faelle aus dem Entwurf.
+        $lauf = Get-LetzterLauf $e
+        $k = Bilde-ErgebnisKarte $lauf
+        Pruefe ($lauf.Anzahl -eq 3 -and $lauf.Fehler -eq 1) "Letzter Lauf: $($lauf.Anzahl) Updates, $($lauf.Fehler) Fehler (erwartet 3 und 1)"
+        Pruefe ($k.Ton -eq 'warn' -and $k.Zahl -eq '3') "3 Updates mit Fehler muss gelb sein, ist $($k.Ton)"
+        $k = Bilde-ErgebnisKarte @{ Gefunden = $true; Gescheitert = $false; Fehler = 0; Anzahl = 5 }
+        Pruefe ($k.Ton -eq 'gut' -and $k.Satz -eq 'Es gab 5 Updates, alle erfolgreich installiert.') "5 Updates ohne Fehler: $($k.Satz)"
+        $k = Bilde-ErgebnisKarte @{ Gefunden = $true; Gescheitert = $false; Fehler = 0; Anzahl = 1 }
+        Pruefe ($k.Satz -eq 'Es gab 1 Update, erfolgreich installiert.') "1 Update: $($k.Satz)"
+        $k = Bilde-ErgebnisKarte @{ Gefunden = $true; Gescheitert = $true; Fehler = 2; Anzahl = 0 }
+        Pruefe ($k.Ton -eq 'schlecht') 'gescheiterter Lauf muss rot sein'
+        $k = Bilde-ErgebnisKarte @{ Gefunden = $true; Gescheitert = $false; Fehler = 0; Anzahl = 0 }
+        Pruefe ($k.Ton -eq 'neutral' -and $k.Satz -like 'Alles aktuell*') 'nichts zu tun muss grau und "Alles aktuell" sein'
+        $k = Bilde-ErgebnisKarte @{ Gefunden = $false; Gescheitert = $false; Fehler = 0; Anzahl = 0 }
+        Pruefe ($k.Ton -eq 'neutral') 'ohne Lauf im Protokoll muss die Karte grau sein'
+        Pruefe ((Get-LetzterLauf (ConvertTo-ProtokollEintraege @('[2026-10-08 04:00:01] [INFO] nichts'))).Gefunden -eq $false) 'Lauf ohne Marke wird als letzter Lauf gelesen'
+        , $r
+    }
+    $liste2 = @($ergebnisse2 | ForEach-Object { $_ })
+    if ($liste2.Count -eq 0) { Melde 'ok' "Protokoll-Ansicht: Eintraege, Tage neueste zuerst, Fehlerfilter, Tageskopf und Ergebniskarte (gruen, gelb, rot, grau) stimmen" }
+    else { foreach ($l in $liste2) { Schlecht "Protokoll-Ansicht: $l" } }
+}
+
 # ── 10. Konfiguration ───────────────────────────────────────────────────────
 if (-not (Test-Path $Konfig)) {
     Schlecht "update-config.json fehlt"

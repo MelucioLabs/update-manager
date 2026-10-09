@@ -99,6 +99,7 @@ Name: "hintergrund"; Description: "{cm:TaskHintergrund}"; GroupDescription: "{cm
 Source: "..\universal-update-manager.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\update-manager-gui.ps1";       DestDir: "{app}"; Flags: ignoreversion
 Source: "..\selbst-update.ps1";          DestDir: "{app}"; Flags: ignoreversion
+Source: "..\protokoll-ansicht.ps1";       DestDir: "{app}"; Flags: ignoreversion
 Source: "..\universal-update-manager.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\update-manager-gui.bat";       DestDir: "{app}"; Flags: ignoreversion
 Source: "..\update-config.json";           DestDir: "{app}"; Flags: ignoreversion
