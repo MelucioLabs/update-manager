@@ -987,6 +987,148 @@ if (Test-Path $Kern) {
     }
 }
 
+# ── 11. Selbst-Update (SELBST-UPDATE.md) ────────────────────────────────────
+#
+# Alles gegen gespeicherte Antworten und Attrappen: kein Netz, kein echtes
+# Setup. Bei AUS (Vorgabe) ist die Probe gruen, wenn das Fenster nichts
+# installieren kann, solange der Schalter nicht gesetzt ist.
+$SelbstUpdate = Join-Path $Ordner 'selbst-update.ps1'
+if (-not (Test-Path $SelbstUpdate)) {
+    Schlecht "selbst-update.ps1 fehlt"
+} else {
+    $f = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseFile($SelbstUpdate, [ref]$null, [ref]$f)
+    $kopf = [System.IO.File]::ReadAllBytes($SelbstUpdate) | Select-Object -First 3
+    if ($f -and $f.Count -gt 0) { Schlecht "selbst-update.ps1 hat Syntaxfehler: $($f[0].Message)" }
+    elseif (-not ($kopf.Count -ge 3 -and $kopf[0] -eq 0xEF -and $kopf[1] -eq 0xBB -and $kopf[2] -eq 0xBF)) { Schlecht "selbst-update.ps1 hat KEIN BOM" }
+    else { Melde 'ok' "selbst-update.ps1 laesst sich parsen, mit BOM" }
+
+    $iss = Join-Path $Ordner 'installer\update-manager.iss'
+    if ((Test-Path $iss) -and ((Get-Content $iss -Raw) -notmatch 'selbst-update\.ps1')) {
+        Schlecht "installer\update-manager.iss nimmt selbst-update.ps1 nicht mit - das Fenster zeigte nach dem Setup keine neue Fassung"
+    }
+
+    # Die Funktionen in einem Kindbereich laden (nichts leckt in die Probe).
+    $ergebnisse = & {
+        . $SelbstUpdate
+        $r = New-Object System.Collections.Generic.List[string]
+        function Pruefe($ok, $text) { if (-not $ok) { $r.Add($text) } }
+
+        # Versionsvergleich als Zahl, nicht als Text.
+        Pruefe (Test-FassungNeuer 'v3.10.0' '3.9.0') '3.10.0 muss neuer sein als 3.9.0'
+        Pruefe (-not (Test-FassungNeuer 'v3.2.0' '3.2.0')) 'gleiche Version ist nicht neuer'
+        Pruefe (-not (Test-FassungNeuer 'v3.1.9' '3.2.0')) 'aeltere Version ist nicht neuer'
+        Pruefe (Test-FassungNeuer 'v3.3.0-rc1' '3.2.0') 'Vorabteil hinter - wird abgeschnitten'
+        Pruefe (-not (Test-FassungNeuer 'abc' '3.2.0')) 'Unsinn ist nicht neuer'
+        Pruefe (-not (Test-FassungNeuer '' '3.2.0')) 'leeres Tag ist nicht neuer'
+
+        # Adresspruefung: fester Anfang.
+        $gut = 'https://github.com/MelucioLabs/update-manager/releases/download/v3.3.0/MelucioLabs-Update-Manager-Setup-3.3.0.exe'
+        Pruefe (Test-SelbstUpdateAdresse $gut) 'die richtige Adresse wird abgelehnt'
+        foreach ($schlecht in @(
+            'http://github.com/MelucioLabs/update-manager/releases/download/v3.3.0/a.exe',
+            'https://github.com/Fremd/update-manager/releases/download/v3.3.0/a.exe',
+            'https://github.com.evil.example/MelucioLabs/update-manager/releases/download/v1/a.exe',
+            'https://github.com/MelucioLabs/update-manager/releases/download/../../x/a.exe',
+            'https://github.com/MelucioLabs/update-manager/releases/download/v1/a.exe@evil.example',
+            '', $null)) {
+            Pruefe (-not (Test-SelbstUpdateAdresse $schlecht)) "Adresse ohne Pruefung durchgelassen: $schlecht"
+        }
+
+        # Pruefsummenliste.
+        $h = ('ab' * 32)
+        $liste = "$h  MelucioLabs-Update-Manager-Setup-3.3.0.exe`r`n" + ('cd' * 32) + "  update-manager.sh`r`n"
+        Pruefe ((Lies-Pruefsumme $liste 'MelucioLabs-Update-Manager-Setup-3.3.0.exe') -eq $h) 'Pruefsumme nicht gefunden'
+        Pruefe ($null -eq (Lies-Pruefsumme $liste 'andere.exe')) 'Pruefsumme fuer fremden Namen geliefert'
+        Pruefe ($null -eq (Lies-Pruefsumme 'kaputt' 'x.exe')) 'kaputte Liste liefert eine Summe'
+
+        # Waehle-Fassung gegen gespeicherte Antworten.
+        function Antwort($tag, $draft, $pre, $setupUrl, $name) {
+            $json = @{
+                tag_name = $tag; draft = $draft; prerelease = $pre
+                html_url = "https://github.com/MelucioLabs/update-manager/releases/tag/$tag"
+                assets = @(
+                    @{ name = $name; browser_download_url = $setupUrl },
+                    @{ name = 'SHA256SUMS.txt'; browser_download_url = 'https://github.com/MelucioLabs/update-manager/releases/download/v3.3.0/SHA256SUMS.txt' }
+                )
+            } | ConvertTo-Json -Depth 5
+            $json | ConvertFrom-Json
+        }
+        $n = 'MelucioLabs-Update-Manager-Setup-3.3.0.exe'
+        $a1 = Waehle-Fassung (Antwort 'v3.3.0' $false $false $gut $n)
+        Pruefe ($a1 -and $a1.SetupName -eq $n -and $a1.Version -eq [version]'3.3.0') 'gueltige Antwort wird nicht erkannt'
+        Pruefe ($null -eq (Waehle-Fassung (Antwort 'v3.3.0' $true $false $gut $n))) 'Entwurf wird angeboten'
+        Pruefe ($null -eq (Waehle-Fassung (Antwort 'v3.3.0' $false $true $gut $n))) 'Vorabfassung wird angeboten'
+        Pruefe ($null -eq (Waehle-Fassung (Antwort 'v3.3.0' $false $false 'https://evil.example/a.exe' $n))) 'fremde Adresse wird angeboten'
+        Pruefe ($null -eq (Waehle-Fassung (Antwort 'v3.3.0' $false $false $gut 'anderer-name.exe'))) 'Setup mit falschem Namen wird angeboten'
+        Pruefe ($null -eq (Waehle-Fassung $null)) 'keine Antwort ergibt etwas'
+        # Downgrade-Mischung: hohes Tag, Dateien eines alten Releases.
+        $alt310 = 'https://github.com/MelucioLabs/update-manager/releases/download/v3.1.0/MelucioLabs-Update-Manager-Setup-3.1.0.exe'
+        Pruefe ($null -eq (Waehle-Fassung (Antwort 'v3.3.0' $false $false $alt310 $n))) 'Setup eines anderen Release-Tags wird angeboten'
+        $kaputt = [pscustomobject]@{ fassung = 'nur ein Text' }
+        Pruefe ($null -eq (Lies-GemerkteFassung $kaputt)) 'unvollstaendige gemerkte Fassung wirft oder wird geglaubt'
+        Pruefe ($null -eq (Lies-GemerkteFassung ([pscustomobject]@{ fassung = [pscustomobject]@{ tag = 'v9.9.9' } }))) 'gemerkte Fassung ohne Felder wird geglaubt'
+
+        # Zustand: hoechstens einmal am Tag, gemerkte Fassung wird neu geprueft.
+        $jetzt = [datetime]::UtcNow
+        Pruefe (-not (Test-HeuteSchonGefragt $null $jetzt)) 'ohne Zustand gilt als nicht gefragt'
+        Pruefe (Test-HeuteSchonGefragt ([pscustomobject]@{ geprueft = $jetzt.AddHours(-3).ToString('o') }) $jetzt) 'vor 3 Stunden gefragt wird nicht erkannt'
+        Pruefe (-not (Test-HeuteSchonGefragt ([pscustomobject]@{ geprueft = $jetzt.AddHours(-25).ToString('o') }) $jetzt)) 'vor 25 Stunden gefragt zaehlt noch als heute'
+        Pruefe (-not (Test-HeuteSchonGefragt ([pscustomobject]@{ geprueft = $jetzt.AddHours(5).ToString('o') }) $jetzt)) 'Zeitpunkt in der Zukunft wird geglaubt'
+        $tmp = Join-Path ([IO.Path]::GetTempPath()) ("um-probe-" + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $tmp | Out-Null
+        try {
+            $zp = Join-Path $tmp 'selbst-update.json'
+            Schreibe-SelbstUpdateZustand $zp $a1 ''
+            $g = Lies-GemerkteFassung (Lies-SelbstUpdateZustand $zp)
+            Pruefe ($g -and $g.Tag -eq 'v3.3.0' -and $g.SetupUrl -eq $gut) 'gemerkte Fassung kommt nicht heil zurueck'
+            $text = Get-Content $zp -Raw
+            Set-Content -LiteralPath $zp -Value ($text -replace 'github\.com/MelucioLabs', 'evil.example/MelucioLabs') -Encoding UTF8
+            Pruefe ($null -eq (Lies-GemerkteFassung (Lies-SelbstUpdateZustand $zp))) 'veraenderte gemerkte Adresse wird geglaubt'
+
+            # Schalter: Vorgabe aus dem Repo und Ueberschreiben.
+            $s0 = Lies-SelbstUpdateSchalter $tmp
+            Pruefe ($s0.Pruefen -eq $true -and $s0.Installieren -eq $false) 'ohne Konfiguration muss Pruefen an und Installieren AUS sein'
+            Set-Content -LiteralPath (Join-Path $tmp 'update-config.local.json') -Value '{"selbstUpdate":{"installieren":true}}' -Encoding UTF8
+            Pruefe ((Lies-SelbstUpdateSchalter $tmp).Installieren -eq $true) 'eigener Schalter installieren=true greift nicht'
+            Set-Content -LiteralPath (Join-Path $tmp 'update-config.local.json') -Value '{kaputt' -Encoding UTF8
+            Pruefe ((Lies-SelbstUpdateSchalter $tmp).Installieren -eq $false) 'kaputte Konfiguration muss bei AUS bleiben'
+
+            # Installieren gegen eine Attrappe (whoami.exe als "Setup").
+            $echt = Join-Path $env:SystemRoot 'System32\whoami.exe'
+            if (Test-Path $echt) {
+                $fake = Join-Path $tmp 'Setup.exe'
+                Copy-Item $echt $fake
+                $summe = (Get-FileHash -LiteralPath $fake -Algorithm SHA256).Hash.ToLower()
+                $x = Installiere-Setup -Pfad $fake -ErwarteteSumme ('0' * 64) -UnsigniertErlaubt -Argumente @('/?')
+                Pruefe (-not $x.Gestartet) 'falsche Pruefsumme darf nichts starten'
+                $x = Installiere-Setup -Pfad $fake -ErwarteteSumme 'zzz' -UnsigniertErlaubt -Argumente @('/?')
+                Pruefe (-not $x.Gestartet) 'ungueltige Pruefsumme darf nichts starten'
+                $x = Installiere-Setup -Pfad $fake -ErwarteteSumme $summe -Argumente @('/?')
+                Pruefe (-not $x.Gestartet) 'unsigniertes Setup ohne Bestaetigung darf nichts starten'
+                $x = Installiere-Setup -Pfad $fake -ErwarteteSumme $summe -UnsigniertErlaubt -Argumente @('/?')
+                Pruefe ($x.Gestartet -and $x.ExitCode -eq 0) "bestaetigtes Setup mit richtiger Summe wird nicht gestartet: $($x.Meldung)"
+                # Sobald ein Aussteller hinterlegt ist, hilft die Bestaetigung nicht mehr.
+                $script:SU_SignaturAussteller = 'MelucioLabs'
+                $x = Installiere-Setup -Pfad $fake -ErwarteteSumme $summe -UnsigniertErlaubt -Argumente @('/?')
+                Pruefe (-not $x.Gestartet) 'mit hinterlegtem Aussteller darf ein unsigniertes Setup nie starten'
+                $script:SU_SignaturAussteller = ''
+            }
+        } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+        , $r
+    }
+    $liste = @($ergebnisse | ForEach-Object { $_ })
+    if ($liste.Count -eq 0) { Melde 'ok' "Selbst-Update: Versionsvergleich, Adresspruefung, Antwortauswahl, Tagesgrenze, Schalter (Vorgabe AUS) und Setup-Pruefung bestehen" }
+    else { foreach ($l in $liste) { Schlecht "Selbst-Update: $l" } }
+
+    # Die Vorgabe im Repo: Installieren AUS, solange nicht signiert.
+    try {
+        $vorgabe = (Get-Content $Konfig -Raw | ConvertFrom-Json).selbstUpdate
+        if ($vorgabe -and $vorgabe.installieren -eq $false) { Melde 'ok' "update-config.json: selbstUpdate.installieren steht auf false (Vorgabe AUS)" }
+        else { Schlecht "update-config.json: selbstUpdate.installieren muss false sein, bis das Setup signiert ist" }
+    } catch { Schlecht "update-config.json: selbstUpdate nicht lesbar" }
+}
+
 # ── 10. Konfiguration ───────────────────────────────────────────────────────
 if (-not (Test-Path $Konfig)) {
     Schlecht "update-config.json fehlt"

@@ -76,8 +76,10 @@ Spiegel dieses Ordners, die Hauptquelle bleibt das MelucioLabs-Monorepo.
 **Stand:** Das Installer-Skript (`installer/update-manager.iss`) und der
 Release-Workflow sind vorbereitet. **Signierte Setups gibt es noch nicht**;
 die Code-Signatur über die SignPath Foundation ist geplant. Bis dahin warnt
-Windows SmartScreen vor einem unbekannten Herausgeber. Das Selbst-Update ist
-ein Konzept (`SELBST-UPDATE.md`) und noch nicht gebaut. Für Linux und macOS
+Windows SmartScreen vor einem unbekannten Herausgeber. Das Fenster fragt höchstens
+einmal am Tag bei GitHub nach einer neuen Fassung; der Knopf „Neue Version
+installieren“ ist gebaut, aber AUS, bis das Setup signiert ist
+(`SELBST-UPDATE.md`). Für Linux und macOS
 gibt es ein eigenes Skript in `linux/` (siehe `linux/LIESMICH.md`).
 
 Eigene Einstellungen gehören in `update-config.local.json` neben den Skripten;

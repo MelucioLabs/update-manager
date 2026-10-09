@@ -86,6 +86,17 @@ $Kern         = Join-Path $SkriptOrdner 'universal-update-manager.ps1'
 $ExePfad      = (Get-Process -Id $PID).Path
 $LogPfad      = Join-Path $env:ProgramData 'UpdateManager\universal-update-manager.log'
 
+# Selbst-Update (SELBST-UPDATE.md): eigene Datei, nur Funktionen. Fehlt sie
+# oder laesst sie sich nicht laden, bleibt das Fenster ohne diese Zeile, es
+# geht nichts anderes kaputt.
+$SelbstUpdateDatei   = Join-Path $SkriptOrdner 'selbst-update.ps1'
+$SelbstUpdateZustand = Join-Path $env:ProgramData 'UpdateManager\selbst-update.json'
+$SelbstUpdateOrdner  = Join-Path $env:ProgramData 'UpdateManager\setup'
+$SelbstUpdateGeladen = $false
+if (Test-Path $SelbstUpdateDatei) {
+    try { . $SelbstUpdateDatei; $SelbstUpdateGeladen = $true } catch { }
+}
+
 if (-not (Test-Path $Kern)) {
     [System.Windows.MessageBox]::Show(
         "Das Hauptskript fehlt:`n$Kern", 'Universal Update Manager') | Out-Null
@@ -295,6 +306,25 @@ $xamlText = @'
              er etwas getan hat oder seit Wochen scheitert. -->
         <TextBlock x:Name="TxtLetzterLauf" Text="" FontSize="12"
                    Foreground="{StaticResource SchriftLei}" Margin="0,3,0,0" TextWrapping="Wrap"/>
+        <!-- Neue Fassung (SELBST-UPDATE.md): erst sichtbar, wenn die
+             Tagesabfrage eine neuere gefunden hat. Kein Dialog, der sich vor
+             die Arbeit schiebt. -->
+        <WrapPanel x:Name="ZeileNeueFassung" Orientation="Horizontal" Margin="0,8,0,0" Visibility="Collapsed">
+          <TextBlock x:Name="TxtNeueFassung" FontSize="12" FontWeight="SemiBold"
+                     Foreground="{StaticResource AkzentText}" VerticalAlignment="Center"
+                     Margin="0,0,12,0" TextWrapping="Wrap"/>
+          <TextBlock FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0">
+            <Hyperlink x:Name="LinkNeueFassung" NavigateUri="https://meluciolabs.de/update"
+                       Foreground="{StaticResource AkzentText}">Was ist neu?</Hyperlink>
+          </TextBlock>
+          <TextBlock x:Name="TxtLinkSeite" FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0">
+            <Hyperlink x:Name="LinkUpdateSeite" NavigateUri="https://meluciolabs.de/update"
+                       Foreground="{StaticResource AkzentText}">Herunterladen</Hyperlink>
+          </TextBlock>
+          <Button x:Name="BtnNeueFassung" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0"
+                  Content="Neue Version installieren" Visibility="Collapsed"/>
+          <Button x:Name="BtnFassungSpaeter" Style="{StaticResource KnopfLeise}" Margin="0" Content="Später"/>
+        </WrapPanel>
       </StackPanel>
     </StackPanel>
 
@@ -436,7 +466,9 @@ $fenster = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReade
 $E = @{}
 foreach ($name in @('TxtHardware','TxtLetzterLauf','LinkMelucio','ChkWinget','ChkChoco','ChkWindows','ChkStore','ChkTreiber',
                     'TxtProtokoll','ScrollProtokoll','LiveRahmen','TxtLive','Fortschritt','TxtStatus','TxtZeit','BtnZeit','TxtAufgabe',
-                    'BtnProtokoll','BtnSchliessen','BtnPruefen','BtnStart')) {
+                    'BtnProtokoll','BtnSchliessen','BtnPruefen','BtnStart',
+                    'ZeileNeueFassung','TxtNeueFassung','LinkNeueFassung','TxtLinkSeite','LinkUpdateSeite',
+                    'BtnNeueFassung','BtnFassungSpaeter')) {
     $E[$name] = $fenster.FindName($name)
     if ($null -eq $E[$name]) { throw "Element fehlt im XAML: $name" }
 }
@@ -993,7 +1025,146 @@ function Lade-Nebenher {
     $warten.Start()
 }
 
-$fenster.Add_ContentRendered({ Lade-Nebenher })
+# ---------------------------------------------------------------------------
+#  Neue Fassung (SELBST-UPDATE.md)
+# ---------------------------------------------------------------------------
+$script:NeueFassung = $null
+$SUStatus = @{ Bestaetigt = $false }
+
+function Zeige-NeueFassung {
+    param($Fassung, $Schalter)
+    $zustand = Lies-SelbstUpdateZustand $SelbstUpdateZustand
+    $aus = if ($zustand -and $zustand.PSObject.Properties['ausgeblendet']) { "$($zustand.ausgeblendet)" } else { '' }
+    if ($aus -and $aus -eq $Fassung.Tag) { return }     # "Später" gilt für diese Fassung
+    $script:NeueFassung = $Fassung
+    $E.TxtNeueFassung.Text = "Version $($Fassung.Version) ist verfügbar."
+    $E.LinkNeueFassung.NavigateUri = [uri]$Fassung.Notizen
+    $E.BtnNeueFassung.Visibility = if ($Schalter.Installieren) { 'Visible' } else { 'Collapsed' }
+    $E.TxtLinkSeite.Visibility   = if ($Schalter.Installieren) { 'Collapsed' } else { 'Visible' }
+    $E.ZeileNeueFassung.Visibility = 'Visible'
+}
+
+# Hoechstens einmal am Tag bei GitHub fragen; sonst den gemerkten Stand zeigen.
+# Die Abfrage laeuft in einem eigenen Faden (wie Lade-Nebenher): Das Fenster
+# darf dabei nicht stehen.
+function Pruefe-Neue-Fassung {
+    if (-not $SelbstUpdateGeladen) { return }
+    $schalter = Lies-SelbstUpdateSchalter $SkriptOrdner
+    if (-not $schalter.Pruefen) { return }
+    $zustand = Lies-SelbstUpdateZustand $SelbstUpdateZustand
+    if (Test-HeuteSchonGefragt $zustand) {
+        $f = Lies-GemerkteFassung $zustand
+        if ($f -and (Test-FassungNeuer $f.Tag $UpdaterVersion)) { Zeige-NeueFassung $f $schalter }
+        return
+    }
+    $rs = [runspacefactory]::CreateRunspace()
+    $rs.Open()
+    $rs.SessionStateProxy.SetVariable('Modul', $SelbstUpdateDatei)
+    $rs.SessionStateProxy.SetVariable('Ist', $UpdaterVersion)
+    $ps = [PowerShell]::Create()
+    $ps.Runspace = $rs
+    [void]$ps.AddScript({ . $Modul; Frage-NeuesteFassung $Ist })
+    $handle = $ps.BeginInvoke()
+    $warten = New-Object System.Windows.Threading.DispatcherTimer
+    $warten.Interval = [TimeSpan]::FromMilliseconds(300)
+    $warten.Add_Tick({
+        if (-not $handle.IsCompleted) { return }
+        $warten.Stop()
+        try {
+            $f = $ps.EndInvoke($handle) | Select-Object -First 1
+            if ($f -and -not (Test-FassungNeuer $f.Tag $UpdaterVersion)) { $f = $null }
+            $alt = Lies-SelbstUpdateZustand $SelbstUpdateZustand
+            $aus = if ($alt -and $alt.PSObject.Properties['ausgeblendet']) { "$($alt.ausgeblendet)" } else { '' }
+            Schreibe-SelbstUpdateZustand $SelbstUpdateZustand $f $aus
+            if ($f) { Zeige-NeueFassung $f $schalter }
+        } catch { } finally { $ps.Dispose(); $rs.Dispose() }
+    }.GetNewClosure())
+    $warten.Start()
+}
+
+$E.BtnFassungSpaeter.Add_Click({
+    if ($script:NeueFassung) {
+        $z = Lies-SelbstUpdateZustand $SelbstUpdateZustand
+        Schreibe-SelbstUpdateZustand $SelbstUpdateZustand (Lies-GemerkteFassung $z) $script:NeueFassung.Tag
+    }
+    $E.ZeileNeueFassung.Visibility = 'Collapsed'
+})
+
+foreach ($l in @($E.LinkNeueFassung, $E.LinkUpdateSeite)) {
+    $l.Add_RequestNavigate({
+        param($absender, $ereignis)
+        # Die Adresse kommt aus Waehle-Fassung (fester Anfang) oder steht fest im Fenster.
+        try { Start-Process $ereignis.Uri.AbsoluteUri } catch { }
+        $ereignis.Handled = $true
+    })
+}
+
+# Installieren: zwei Klicks, solange das Setup unsigniert ist (Rueckfrage im
+# Fenster, kein Dialog). Laden, Pruefen und Starten laufen in einem eigenen
+# Faden; das Fenster schliesst sich erst, wenn das Setup durch ist, und wird
+# danach neu geoeffnet.
+$E.BtnNeueFassung.Add_Click({
+    if (-not $script:NeueFassung -or $Lauf.kind -gt 0) { return }
+    # Nicht nur "Knopf unsichtbar": Der Schalter wird hier noch einmal gelesen.
+    if (-not (Lies-SelbstUpdateSchalter $SkriptOrdner).Installieren) { return }
+    $signiert = [bool]$script:SU_SignaturAussteller
+    if (-not $signiert -and -not $SUStatus.Bestaetigt) {
+        $SUStatus.Bestaetigt = $true
+        $E.TxtNeueFassung.Text = 'Das Setup ist noch nicht signiert; Windows meldet evtl. einen unbekannten Herausgeber. Die Prüfsumme wird vor dem Start geprüft.'
+        $E.BtnNeueFassung.Content = 'Ja, installieren'
+        return
+    }
+    $tagNeu = $script:NeueFassung.Tag
+    $E.BtnNeueFassung.IsEnabled = $false
+    $E.BtnFassungSpaeter.IsEnabled = $false
+    $E.TxtNeueFassung.Text = 'Wird geladen und installiert …'
+    $rs = [runspacefactory]::CreateRunspace()
+    $rs.Open()
+    $rs.SessionStateProxy.SetVariable('Modul', $SelbstUpdateDatei)
+    $rs.SessionStateProxy.SetVariable('Fassung', $script:NeueFassung)
+    $rs.SessionStateProxy.SetVariable('Ordner', $SelbstUpdateOrdner)
+    $rs.SessionStateProxy.SetVariable('Unsig', (-not $signiert))
+    $ps = [PowerShell]::Create()
+    $ps.Runspace = $rs
+    [void]$ps.AddScript({
+        . $Modul
+        try {
+            $d = Lade-Setup $Fassung $Ordner
+            Installiere-Setup -Pfad $d.Pfad -ErwarteteSumme $d.Summe -UnsigniertErlaubt:$Unsig
+        } catch {
+            @{ Gestartet = $false; ExitCode = $null; Meldung = "Nicht geladen: $($_.Exception.Message)" }
+        }
+    })
+    $handle = $ps.BeginInvoke()
+    $warten = New-Object System.Windows.Threading.DispatcherTimer
+    $warten.Interval = [TimeSpan]::FromMilliseconds(500)
+    $warten.Add_Tick({
+        if (-not $handle.IsCompleted) { return }
+        $warten.Stop()
+        $erg = $null
+        try { $erg = $ps.EndInvoke($handle) | Select-Object -First 1 } catch { }
+        $ps.Dispose(); $rs.Dispose()
+        $ok = $erg -and $erg.Gestartet -and $erg.ExitCode -eq 0
+        try {
+            $zeile = '[{0}] [GUI] [{1}] Selbst-Update auf {2}: {3}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),
+                     $(if ($ok) { 'INFO' } else { 'ERROR' }), $tagNeu, $(if ($erg) { $erg.Meldung } else { 'keine Antwort' })
+            Add-Content -Path $LogPfad -Value $zeile -Encoding UTF8
+        } catch { }
+        if ($ok) {
+            Start-Process -FilePath (Join-Path $SkriptOrdner 'update-manager-gui.bat') -WorkingDirectory $SkriptOrdner
+            $fenster.Close()
+            return
+        }
+        $E.TxtNeueFassung.Text = "Nicht installiert: $(if ($erg) { $erg.Meldung } else { 'keine Antwort' }). Die bisherige Version bleibt."
+        $E.BtnNeueFassung.Content = 'Neue Version installieren'
+        $SUStatus.Bestaetigt = $false
+        $E.BtnNeueFassung.IsEnabled = $true
+        $E.BtnFassungSpaeter.IsEnabled = $true
+    }.GetNewClosure())
+    $warten.Start()
+})
+
+$fenster.Add_ContentRendered({ Lade-Nebenher; Pruefe-Neue-Fassung })
 
 if ($Abbild) {
     # NICHT das Fenster zeichnen, sondern seinen INHALT. Ein Window, das nie

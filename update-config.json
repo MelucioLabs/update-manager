@@ -4,6 +4,11 @@
     "scheduledTaskName": "UpdateManager-SilentMode",
     "comment": "Einstellungen fuer den automatischen Hintergrund-Modus (Winget + Chocolatey)"
   },
+  "selbstUpdate": {
+    "pruefen": true,
+    "installieren": false,
+    "comment": "pruefen: Das Fenster fragt hoechstens einmal am Tag bei GitHub (api.github.com, nur dieses Repo) nach der neuesten Fassung und zeigt einen Hinweis; geladen wird dabei nichts. installieren: schaltet den Knopf 'Neue Version installieren' frei. Vorgabe AUS, solange das Setup nicht signiert ist (SELBST-UPDATE.md). Eigene Werte gehoeren in update-config.local.json."
+  },
   "benachrichtigung": {
     "enabled": false,
     "url": "",
