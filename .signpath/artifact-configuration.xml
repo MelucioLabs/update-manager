@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+
+  Artefakt-Konfiguration fuer SignPath (Vorschlag, wird bei SignPath
+  hinterlegt). Sie wirkt erst nach der Zulassung durch die SignPath
+  Foundation; die Schalter-Beschreibung steht im Monorepo unter
+  docs/update-manager-signpath-antrag.md.
+
+  Aufbau: Der Workflow laedt dist/MelucioLabs-Update-Manager-Setup-<Version>.exe
+  als GitHub-Artefakt hoch (Standard: ZIP, daher <zip-file> als Wurzel).
+  Signiert wird genau diese eine Datei, nichts anderes.
+
+  Pflicht der Foundation: Produktname und Produktversion der Datei sind
+  festgelegt und werden geprueft (product-name, product-version). Beides setzt
+  installer/update-manager.iss; die Version kommt als Parameter "version" aus
+  dem Workflow; "productversion" ist die rein numerische Fassung (3.2.0.0), die der Installer in beide Produktversions-Felder schreibt, "version" die Fassung aus dem Git-Tag (nur fuer den Dateinamen).
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+    <parameter name="productversion" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="MelucioLabs-Update-Manager-Setup-${version}.exe"
+             product-name="MelucioLabs Update-Manager"
+             product-version="${productversion}"
+             company-name="MelucioLabs">
+      <authenticode-sign hash-algorithm="sha256"
+                         description="MelucioLabs Update-Manager"
+                         description-url="https://github.com/MelucioLabs/update-manager" />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

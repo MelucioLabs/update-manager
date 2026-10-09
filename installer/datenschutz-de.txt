@@ -1,0 +1,12 @@
+﻿Datenschutz
+
+Der Update-Manager sendet keine Telemetrie und legt kein Konto an. Der Anbieter (MelucioLabs, Kontakt siehe Impressum der Webseite meluciolabs.de) erhält dabei keine Daten.
+
+Einmal am Tag fragt das Fenster bei GitHub (api.github.com, nur dieses Repository) nach einer neueren Fassung. Zweck ist allein die Benachrichtigung über Updates. GitHub (Microsoft, USA) erfährt dabei die IP-Adresse und die übliche Anfrage und ist dafür selbst verantwortlich:
+https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement
+
+Abschalten: selbstUpdate.pruefen = false in update-config.local.json.
+
+Weitere Verbindungen gibt es nur zu den Paketquellen, aus denen aktualisiert wird (winget, Chocolatey, Windows Update, Microsoft Store, PowerShell-Katalog), und zu einem ntfy-Server, falls einer eingetragen wird. Deren Betreiber sehen ebenfalls die IP-Adresse.
+
+Einzelheiten: CODE-SIGNING-POLICY.md im Programmordner.

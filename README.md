@@ -76,13 +76,22 @@ of this folder, the source of truth stays in the MelucioLabs monorepo.
 **Status:** The installer script (`installer/update-manager.iss`) and the
 release workflow are prepared. **Signed setups are not available yet**; code
 signing through the SignPath Foundation is planned. Until then Windows
-SmartScreen will warn about an unknown publisher. The window checks GitHub at most once a day and shows a notice; the
-"install new version" button is built but OFF by default until the setup is
-signed (`SELBST-UPDATE.md`). Linux and macOS have their own
+SmartScreen will warn about an unknown publisher. The self-update is a
+concept (`SELBST-UPDATE.md`), not yet built. Linux and macOS have their own
 script in `linux/` (see `linux/LIESMICH.md`).
 
 Own settings belong in `update-config.local.json` next to the scripts; the
 setup never touches that file, so it survives every update.
+
+---
+
+## Code signing policy
+
+Setups are meant to be signed with a certificate from the SignPath
+Foundation. **Status: application in preparation, nothing granted yet**; until then every
+setup is unsigned. Roles, release process, privacy and the exact wording
+that applies from the first signed release are in
+[`CODE-SIGNING-POLICY.md`](CODE-SIGNING-POLICY.md).
 
 ---
 

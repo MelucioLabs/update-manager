@@ -1,32 +1,10 @@
-# Selbst-Update
+# Selbst-Update (Konzept, noch nicht gebaut)
 
-Stand 08.10.2026. **Gebaut, Installieren standardmäßig AUS.** Der Code steht in
-`selbst-update.ps1` (nur Funktionen) und im Kopf des Fensters
-(`update-manager-gui.ps1`, Abschnitt „Neue Fassung“). Geprüft wird er von
-`probe.ps1` (Abschnitt 11) gegen gespeicherte Antworten und eine Attrappe, nicht
-gegen ein echtes Release: Das öffentliche Repo und das erste Release gibt es
-noch nicht.
-
-Schalter in `update-config.json` (eigene Werte in `update-config.local.json`):
-
-| Schalter | Vorgabe | Wirkung |
-| --- | --- | --- |
-| `selbstUpdate.pruefen` | `true` | höchstens einmal am Tag bei GitHub fragen, Zeile „Version X ist verfügbar“ mit Link auf die Notizen und auf `meluciolabs.de/update`; lädt nichts |
-| `selbstUpdate.installieren` | `false` | blendet „Neue Version installieren“ ein; **erst mit Signatur freischalten** |
-
-Solange `$SU_SignaturAussteller` in `selbst-update.ps1` leer ist (Setup
-unsigniert), verlangt der Knopf zwei Klicks („Ja, installieren“) und prüft
-trotzdem die SHA-256-Summe. Steht dort ein Aussteller, startet **nie** ein
-unsigniertes oder fremd signiertes Setup, auch nicht nach Bestätigung.
-Der stille Lauf der Aufgabenplanung aktualisiert sich nicht selbst (siehe unten)
-und fragt auch nicht nach.
-
-Umgesetzt abweichend vom ersten Entwurf: Der Ablauf läuft in einem eigenen Faden
-(Fenster steht nicht), die Datei bleibt bis zum Ende des Setups mit gesperrtem
-Schreibzugriff geöffnet (kein Austausch zwischen Prüfen und Starten), geladen
-wird nach `%ProgramData%\UpdateManager\setup\` (nur SYSTEM und Administratoren),
-und das Fenster öffnet sich nach erfolgreichem Setup (Exit-Code 0) selbst neu.
-Die gemerkte Antwort in `selbst-update.json` wird wie eine Netzantwort geprüft.
+Stand 28.09.2026. **Entwurf.** Im Code gibt es dafür bisher nur die Konstante
+`$UpdaterVersion` in `universal-update-manager.ps1` und `update-manager-gui.ps1`
+(beide gleich, der Release-Workflow prüft das). Netzwerkcode steht absichtlich
+noch nicht in der Oberfläche: Er wäre ungetestet, und ein Updater, der sich
+selbst kaputt aktualisiert, ist schlimmer als keiner.
 
 ## Ziel
 
@@ -112,13 +90,12 @@ Fassung gibt.
 - **Rückweg**: Scheitert das Setup, bleibt die alte Fassung stehen (Inno Setup
   ersetzt erst am Ende). Das Protokoll bekommt den Exit-Code.
 
-## Was noch fehlt
+## Was dafür noch fehlt
 
 - Signierung über SignPath (Antrag, Einrichtung im Release-Workflow, dort als
-  auskommentierter Schritt vorbereitet). Danach `$SU_SignaturAussteller` setzen
-  und `selbstUpdate.installieren` in der Vorgabe auf `true`.
-- Ein erstes echtes Release (öffentliches Repo legt David an), damit der Weg
-  einmal von Anfang bis Ende auf einem Rechner läuft. Bis dahin ist Installieren
-  nur gegen eine Attrappe geprobt.
-- Offen: Im Windows-Setup läuft die `.bat` des Fensters noch, während sie ersetzt
-  wird; auf einem echten Release prüfen, dass das Setup sie überschreiben darf.
+  auskommentierter Schritt vorbereitet).
+- Der Code in `update-manager-gui.ps1`: Abfrage, Vergleich, Zeile im Kopf,
+  Download, Prüfung, Start. Geschätzt 150 bis 200 Zeilen, dazu eine Probe in
+  `probe.ps1` für den Versionsvergleich und die Adressprüfung (ohne Netz, gegen
+  eine gespeicherte API-Antwort).
+- Ein erstes echtes Release, gegen das getestet werden kann.

@@ -11,7 +11,7 @@
 #   2. faehrt die Bausteinprobe (probe.ps1) unter Windows PowerShell 5.1,
 #   3. prueft das Linux-Skript (bash -n, test.sh, shellcheck),
 #   4. baut das Setup mit Inno Setup,
-#   5. (spaeter) signiert es ueber die SignPath Foundation,
+#   5. signiert es ueber die SignPath Foundation (Schalter SIGNPATH_AKTIV, aus),
 #   6. legt ein Release an: Setup, Pruefsumme, Linux-Skript.
 #
 # UNGETESTET: geschrieben ohne Windows-Rechner und ohne das Ziel-Repo. Der
@@ -68,6 +68,10 @@ jobs:
               $version = "$version-dev"
           }
           "version=$version" >> $env:GITHUB_OUTPUT
+          # Rein numerisch (a.b.c.d) fuer die Versionsinfo der Setup-Datei.
+          $num = @($version.Split('-')[0].Split('.'))
+          while ($num.Count -lt 4) { $num += '0' }
+          "versionnum=$($num[0..3] -join '.')" >> $env:GITHUB_OUTPUT
           "Version: $version"
 
       - name: Bausteinprobe (Windows PowerShell 5.1)
@@ -85,41 +89,61 @@ jobs:
       - name: Setup bauen
         shell: pwsh
         run: |
-          & $env:ISCC "/DAppVersion=${{ steps.version.outputs.version }}" installer\update-manager.iss
+          & $env:ISCC "/DAppVersion=${{ steps.version.outputs.version }}" "/DAppVersionNum=${{ steps.version.outputs.versionnum }}" installer\update-manager.iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC ist mit $LASTEXITCODE gescheitert" }
           Get-ChildItem dist
 
-      # --- Signieren (noch nicht aktiv) ------------------------------------
-      # Sobald die SignPath Foundation das Projekt aufgenommen hat:
-      #   https://signpath.org/            (Antrag fuer Open-Source-Projekte)
-      #   https://docs.signpath.io/trusted-build-systems/github
-      # Dann: unsigniertes Setup als Artefakt hochladen, SignPath signiert
-      # es und liefert es zurueck, danach wird das signierte hochgeladen.
-      # Secret SIGNPATH_API_TOKEN und die IDs kommen von SignPath.
-      #
-      # - name: Unsigniertes Setup als Artefakt
-      #   id: unsigniert
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: setup-unsigniert
-      #     path: dist/*.exe
-      #
-      # - name: Signieren ueber SignPath
-      #   uses: signpath/github-action-submit-signing-request@v1
-      #   with:
-      #     api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-      #     organization-id: '<von SignPath>'
-      #     project-slug: 'update-manager'
-      #     signing-policy-slug: 'release-signing'
-      #     github-artifact-id: ${{ steps.unsigniert.outputs.artifact-id }}
-      #     wait-for-completion: true
-      #     output-artifact-directory: dist
-      #
-      # - name: Signatur pruefen
-      #   shell: pwsh
-      #   run: |
-      #     $s = Get-AuthenticodeSignature (Get-ChildItem dist\*.exe).FullName
-      #     if ($s.Status -ne 'Valid') { throw "Signatur: $($s.Status)" }
+      # --- Signieren ueber die SignPath Foundation -------------------------
+      # AUS, bis die Foundation das Projekt aufgenommen hat. Einschalten:
+      # Repository-Variable SIGNPATH_AKTIV = true (Settings > Secrets and
+      # variables > Actions > Variables), dazu das Secret SIGNPATH_API_TOKEN
+      # und die Variablen SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_SLUG,
+      # SIGNPATH_SIGNING_POLICY_SLUG (die Werte stammen aus dem SignPath-Konto).
+      # Anleitung und Antragsliste: im Monorepo docs/update-manager-signpath-antrag.md.
+      # Nur Tag-Laeufe werden signiert; JEDES Release braucht die Freigabe von
+      # Hand in SignPath, der Lauf wartet darauf (bis 60 Minuten).
+      # Bedingungen: https://signpath.org/terms
+      # Action:      https://docs.signpath.io/trusted-build-systems/github
+      # Artefakt-Konfiguration: .signpath/artifact-configuration.xml
+      - name: Unsigniertes Setup als Artefakt
+        id: unsigniert
+        if: github.ref_type == 'tag' && vars.SIGNPATH_AKTIV == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: setup-unsigniert
+          path: dist/MelucioLabs-Update-Manager-Setup-*.exe
+          if-no-files-found: error
+
+      - name: Signieren ueber SignPath
+        if: github.ref_type == 'tag' && vars.SIGNPATH_AKTIV == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigniert.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signiert
+          parameters: |
+            version: "${{ steps.version.outputs.version }}"
+            productversion: "${{ steps.version.outputs.versionnum }}"
+
+      - name: Signiertes Setup uebernehmen und Signatur pruefen
+        if: github.ref_type == 'tag' && vars.SIGNPATH_AKTIV == 'true'
+        shell: pwsh
+        run: |
+          $signiert = @(Get-ChildItem signiert -Filter 'MelucioLabs-Update-Manager-Setup-*.exe' -Recurse)
+          if ($signiert.Count -ne 1) { throw "Erwartet genau ein signiertes Setup, gefunden: $($signiert.Count)" }
+          Copy-Item $signiert[0].FullName dist\ -Force
+          $datei = Join-Path dist $signiert[0].Name
+          $s = Get-AuthenticodeSignature $datei
+          if ($s.Status -ne 'Valid') { throw "Signatur: $($s.Status)" }
+          if ($s.SignerCertificate.Subject -notmatch '(^|, )CN=SignPath Foundation(,|$)') {
+              throw "Unerwarteter Aussteller: $($s.SignerCertificate.Subject)"
+          }
+          "Signiert von: $($s.SignerCertificate.Subject)"
       # ---------------------------------------------------------------------
 
       # Feste Adresse fuer die Seite meluciolabs.de/update: GitHub liefert

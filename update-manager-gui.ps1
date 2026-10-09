@@ -86,24 +86,6 @@ $Kern         = Join-Path $SkriptOrdner 'universal-update-manager.ps1'
 $ExePfad      = (Get-Process -Id $PID).Path
 $LogPfad      = Join-Path $env:ProgramData 'UpdateManager\universal-update-manager.log'
 
-# Selbst-Update (SELBST-UPDATE.md): eigene Datei, nur Funktionen. Fehlt sie
-# oder laesst sie sich nicht laden, bleibt das Fenster ohne diese Zeile, es
-# geht nichts anderes kaputt.
-$SelbstUpdateDatei   = Join-Path $SkriptOrdner 'selbst-update.ps1'
-$SelbstUpdateZustand = Join-Path $env:ProgramData 'UpdateManager\selbst-update.json'
-$SelbstUpdateOrdner  = Join-Path $env:ProgramData 'UpdateManager\setup'
-# Protokoll-Ansicht (protokoll-ansicht.ps1): reine Funktionen. Fehlt die Datei,
-# bleibt die Karte bei "Wird gelesen" und das Protokoll oeffnet wie frueher.
-$AnsichtDatei   = Join-Path $SkriptOrdner 'protokoll-ansicht.ps1'
-$AnsichtGeladen = $false
-if (Test-Path $AnsichtDatei) {
-    try { . $AnsichtDatei; $AnsichtGeladen = $true } catch { }
-}
-$SelbstUpdateGeladen = $false
-if (Test-Path $SelbstUpdateDatei) {
-    try { . $SelbstUpdateDatei; $SelbstUpdateGeladen = $true } catch { }
-}
-
 if (-not (Test-Path $Kern)) {
     [System.Windows.MessageBox]::Show(
         "Das Hauptskript fehlt:`n$Kern", 'Universal Update Manager') | Out-Null
@@ -175,7 +157,6 @@ $xamlText = @'
     <SolidColorBrush x:Key="Bahn"         Color="__BAHN__"/>
     <SolidColorBrush x:Key="Gut"          Color="__GUT__"/>
     <SolidColorBrush x:Key="Schlecht"     Color="__SCHLECHT__"/>
-    <SolidColorBrush x:Key="Warn"         Color="__WARN__"/>
 
     <Style TargetType="TextBlock">
       <Setter Property="Foreground" Value="{StaticResource Schrift}"/>
@@ -199,8 +180,7 @@ $xamlText = @'
                   <Ellipse x:Name="Knauf" Width="20" Height="20" Fill="__KNAUF__"
                            HorizontalAlignment="Left" Margin="3,0,0,0"/>
                 </Border>
-                <TextBlock x:Name="Symbol" Text="{TemplateBinding Tag}" FontSize="16" Foreground="{StaticResource AkzentText}"
-                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                <TextBlock x:Name="Symbol" Text="{TemplateBinding Tag}" FontSize="15" Foreground="{StaticResource Schrift}"
                            Margin="14,0,8,0" VerticalAlignment="Center"/>
                 <ContentPresenter VerticalAlignment="Center"/>
               </StackPanel>
@@ -278,45 +258,6 @@ $xamlText = @'
         </Setter.Value>
       </Setter>
     </Style>
-
-    <!-- Symbole: eine Schrift, ein Strich. Segoe Fluent Icons (Windows 11),
-         sonst Segoe MDL2 Assets (Windows 10); keine Emoji. -->
-    <Style x:Key="Symbol" TargetType="TextBlock">
-      <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
-      <Setter Property="FontSize" Value="20"/>
-      <Setter Property="Foreground" Value="{StaticResource AkzentText}"/>
-    </Style>
-    <Style x:Key="SymbolKnopf" TargetType="TextBlock" BasedOn="{StaticResource Symbol}">
-      <Setter Property="FontSize" Value="15"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
-      <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-    </Style>
-
-    <!-- Kleine Karte, die sich anklicken laesst. Tastaturfokus: Rahmen in der
-         Akzentfarbe (die Standard-Fokuslinie fehlt in einer eigenen Vorlage). -->
-    <Style x:Key="Kachel" TargetType="Button">
-      <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="MinHeight" Value="96"/>
-      <Setter Property="Background" Value="{StaticResource Karte}"/>
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="Button">
-            <Border x:Name="Flaeche" Background="{TemplateBinding Background}" BorderBrush="Transparent"
-                    BorderThickness="2" CornerRadius="10" Padding="14,12">
-              <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Top"/>
-            </Border>
-            <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Flaeche" Property="Background" Value="__KNOPFHOVER__"/>
-              </Trigger>
-              <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="Flaeche" Property="BorderBrush" Value="{StaticResource AkzentText}"/>
-              </Trigger>
-            </ControlTemplate.Triggers>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
-    </Style>
   </Window.Resources>
 
   <Grid Margin="22">
@@ -354,95 +295,22 @@ $xamlText = @'
              er etwas getan hat oder seit Wochen scheitert. -->
         <TextBlock x:Name="TxtLetzterLauf" Text="" FontSize="12"
                    Foreground="{StaticResource SchriftLei}" Margin="0,3,0,0" TextWrapping="Wrap"/>
-        <!-- Neue Fassung (SELBST-UPDATE.md): erst sichtbar, wenn die
-             Tagesabfrage eine neuere gefunden hat. Kein Dialog, der sich vor
-             die Arbeit schiebt. -->
-        <WrapPanel x:Name="ZeileNeueFassung" Orientation="Horizontal" Margin="0,8,0,0" Visibility="Collapsed">
-          <TextBlock x:Name="TxtNeueFassung" FontSize="12" FontWeight="SemiBold"
-                     Foreground="{StaticResource AkzentText}" VerticalAlignment="Center"
-                     Margin="0,0,12,0" TextWrapping="Wrap"/>
-          <TextBlock FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0">
-            <Hyperlink x:Name="LinkNeueFassung" NavigateUri="https://meluciolabs.de/update"
-                       Foreground="{StaticResource AkzentText}">Was ist neu?</Hyperlink>
-          </TextBlock>
-          <TextBlock x:Name="TxtLinkSeite" FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0">
-            <Hyperlink x:Name="LinkUpdateSeite" NavigateUri="https://meluciolabs.de/update"
-                       Foreground="{StaticResource AkzentText}">Herunterladen</Hyperlink>
-          </TextBlock>
-          <Button x:Name="BtnNeueFassung" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0"
-                  Content="Neue Version installieren" Visibility="Collapsed"/>
-          <Button x:Name="BtnFassungSpaeter" Style="{StaticResource KnopfLeise}" Margin="0" Content="Später"/>
-        </WrapPanel>
       </StackPanel>
     </StackPanel>
 
-    <StackPanel Grid.Row="1">
-    <!-- Standardansicht kurz (Davids Frage 08.10.2026, ob das Fenster so
-         ausfuehrlich zeigen muss, was es tut): eine Zahl, ein Satz. Alles
-         Weitere steht unter "Details". Farbe und Zeichen tragen zusammen. -->
-    <Grid Margin="0,0,0,10">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
-      </Grid.ColumnDefinitions>
-      <Border x:Name="KarteErgebnis" Grid.Column="0" Background="{StaticResource Karte}" CornerRadius="10" Margin="0,0,10,0" MinHeight="96">
-        <Grid>
-          <Border x:Name="StreifenErgebnis" Width="5" HorizontalAlignment="Left" CornerRadius="10,0,0,10"
-                  Background="{StaticResource SchriftLei}"/>
-          <StackPanel Margin="18,12,12,12">
-            <TextBlock x:Name="TxtIconErgebnis" Style="{StaticResource Symbol}" Text="&#xE895;"/>
-            <TextBlock x:Name="TxtZahl" Text="" FontSize="26" FontWeight="SemiBold" Margin="0,6,0,0"
-                       Foreground="{StaticResource SchriftLei}" AutomationProperties.Name="Anzahl"/>
-            <TextBlock Text="Updates im letzten Lauf" FontSize="12" Foreground="{StaticResource SchriftLei}" TextWrapping="Wrap"/>
-          </StackPanel>
-        </Grid>
-      </Border>
-      <Button x:Name="KachelEinstellungen" Grid.Column="1" Style="{StaticResource Kachel}" Margin="0,0,10,0"
-              AutomationProperties.Name="Einstellungen ein- oder ausblenden">
-        <StackPanel>
-          <TextBlock Style="{StaticResource Symbol}" Text="&#xE713;"/>
-          <TextBlock x:Name="TxtKachelEinst" Text="5 von 5" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" Foreground="{StaticResource Schrift}"/>
-          <TextBlock Text="Quellen aktiv" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
-        </StackPanel>
-      </Button>
-      <Button x:Name="KachelVerlauf" Grid.Column="2" Style="{StaticResource Kachel}" Margin="0,0,10,0"
-              AutomationProperties.Name="Verlauf dieser Sitzung ein- oder ausblenden">
-        <StackPanel>
-          <TextBlock Style="{StaticResource Symbol}" Text="&#xE81C;"/>
-          <TextBlock Text="Verlauf" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" Foreground="{StaticResource Schrift}"/>
-          <TextBlock x:Name="TxtKachelVerlauf" Text="dieser Sitzung" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
-        </StackPanel>
-      </Button>
-      <Button x:Name="KachelProtokolle" Grid.Column="3" Style="{StaticResource Kachel}"
-              AutomationProperties.Name="Protokoll ein- oder ausblenden">
-        <StackPanel>
-          <TextBlock Style="{StaticResource Symbol}" Text="&#xE8A5;"/>
-          <TextBlock x:Name="TxtKachelProto" Text="Protokoll" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" Foreground="{StaticResource Schrift}"/>
-          <TextBlock x:Name="TxtKachelProtoZeit" Text="im Protokoll" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
-        </StackPanel>
-      </Button>
-    </Grid>
-    <StackPanel Margin="2,0,0,14">
-      <TextBlock x:Name="TxtErgebnis" Text="Wird gelesen …" FontSize="16" TextWrapping="Wrap"
-                 Foreground="{StaticResource Schrift}"/>
-      <TextBlock x:Name="TxtErgebnisZeit" Text="" FontSize="12" Margin="0,3,0,0" TextWrapping="Wrap"
-                 Foreground="{StaticResource SchriftLei}"/>
-    </StackPanel>
-    <!-- Die Schalter stehen vorbelegt auf "alles" und sind selten anzufassen:
-         zu, bis jemand sie sucht. -->
-    <StackPanel x:Name="PanelEinstellungen" Visibility="Collapsed" Margin="0,0,0,12">
-    <Border Background="{StaticResource Karte}" CornerRadius="10" Padding="20,14" Margin="0,8,0,0">
+    <Border Grid.Row="1" Background="{StaticResource Karte}" CornerRadius="10" Padding="20,14" Margin="0,0,0,16">
       <StackPanel>
         <TextBlock Text="Was soll geprüft werden?" FontSize="14" FontWeight="SemiBold"
                    Foreground="{StaticResource SchriftLei}" Margin="0,0,0,4"/>
-        <CheckBox x:Name="ChkWinget"  Style="{StaticResource Schalter}" Tag="&#xE8F1;" IsChecked="True"
+        <CheckBox x:Name="ChkWinget"  Style="{StaticResource Schalter}" Tag="📦" IsChecked="True"
                   Content="Winget: Programme aus dem Microsoft-Paketverzeichnis"/>
-        <CheckBox x:Name="ChkChoco"   Style="{StaticResource Schalter}" Tag="&#xE7B8;" IsChecked="True"
+        <CheckBox x:Name="ChkChoco"   Style="{StaticResource Schalter}" Tag="🍫" IsChecked="True"
                   Content="Chocolatey: Programme aus dem Community-Verzeichnis"/>
-        <CheckBox x:Name="ChkWindows" Style="{StaticResource Schalter}" Tag="&#xE770;" IsChecked="True"
+        <CheckBox x:Name="ChkWindows" Style="{StaticResource Schalter}" Tag="🖥" IsChecked="True"
                   Content="Windows Update: System und Treiber"/>
-        <CheckBox x:Name="ChkStore"   Style="{StaticResource Schalter}" Tag="&#xE8A1;" IsChecked="True"
+        <CheckBox x:Name="ChkStore"   Style="{StaticResource Schalter}" Tag="🏬" IsChecked="True"
                   Content="Microsoft Store: Apps im Hintergrund anstoßen"/>
-        <CheckBox x:Name="ChkTreiber" Style="{StaticResource Schalter}" Tag="&#xE950;" IsChecked="True"
+        <CheckBox x:Name="ChkTreiber" Style="{StaticResource Schalter}" Tag="🔧" IsChecked="True"
                   Content="Hersteller-Werkzeuge: nur erkannte Hardware"/>
         <!-- Die nächtliche Uhrzeit gehört hierher und nicht ins alte
              Konsolenmenü: Wer hier steht, will einstellen, was der Manager
@@ -458,72 +326,22 @@ $xamlText = @'
                    Background="{StaticResource Tief}" Foreground="{StaticResource Schrift}"
                    CaretBrush="{StaticResource Schrift}" Padding="6,4"/>
           <TextBlock Text="Uhr" FontSize="14" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Schrift}"/>
-          <Button x:Name="BtnZeit" Style="{StaticResource KnopfLeise}"
-                  Margin="14,0,0,0">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE73E;"/>
-            <TextBlock x:Name="TxtBtnZeit" Text="Übernehmen" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-          </StackPanel>
-        </Button>
+          <Button x:Name="BtnZeit" Style="{StaticResource KnopfLeise}" Content="Übernehmen"
+                  Margin="14,0,0,0"/>
         </StackPanel>
         <TextBlock x:Name="TxtAufgabe" Text="" FontSize="12" Margin="0,8,0,0"
                    TextWrapping="Wrap" Foreground="{StaticResource SchriftLei}"/>
       </StackPanel>
     </Border>
-    </StackPanel>
-    </StackPanel>
 
-    <!-- Details starten geschlossen (Hausregel: Aufklappbares ist zu). Hier
-         liegen der Verlauf dieser Sitzung und das Protokoll, schoen gesetzt. -->
-    <Grid x:Name="PanelDetails" Grid.Row="2" Visibility="Collapsed">
-      <Grid>
-        <Grid.RowDefinitions>
-          <RowDefinition Height="Auto"/>
-          <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-        <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-          <Button x:Name="BtnAnsichtVerlauf" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE81C;"/>
-            <TextBlock x:Name="TxtBtnAnsichtVerlauf" Text="Verlauf" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-          </StackPanel>
-        </Button>
-          <Button x:Name="BtnAnsichtProtokoll" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE8A5;"/>
-            <TextBlock x:Name="TxtBtnAnsichtProtokoll" Text="Protokoll" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-          </StackPanel>
-        </Button>
-          <Button x:Name="BtnFilterAlles" Style="{StaticResource KnopfLeise}" Margin="16,0,8,0" Visibility="Collapsed">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE8FD;"/>
-            <TextBlock x:Name="TxtBtnFilterAlles" Text="Alles" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-          </StackPanel>
-        </Button>
-          <Button x:Name="BtnFilterFehler" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0" Visibility="Collapsed">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE783;"/>
-            <TextBlock x:Name="TxtBtnFilterFehler" Text="Fehler (0)" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-          </StackPanel>
-        </Button>
-        </WrapPanel>
-        <Border x:Name="PanelVerlauf" Grid.Row="1" Background="{StaticResource Tief}" CornerRadius="10" Padding="4" MinHeight="120">
-          <ScrollViewer x:Name="ScrollProtokoll" VerticalScrollBarVisibility="Auto">
-            <TextBox x:Name="TxtProtokoll" Background="Transparent" Foreground="__PROTOKOLL__"
-                     BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12"
-                     IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" Padding="12,8"
-                     Text="Bereit. Nichts wird verändert, bevor eine Schaltfläche gedrückt wird."/>
-          </ScrollViewer>
-        </Border>
-        <Border x:Name="PanelProtokoll" Grid.Row="1" Background="{StaticResource Tief}" CornerRadius="10" Padding="4"
-                MinHeight="120" Visibility="Collapsed">
-          <RichTextBox x:Name="RtfProtokoll" Background="Transparent" Foreground="__PROTOKOLL__"
-                       BorderThickness="0" IsReadOnly="True" FontFamily="Segoe UI" FontSize="13"
-                       VerticalScrollBarVisibility="Auto" Padding="8,4"
-                       AutomationProperties.Name="Protokoll"/>
-        </Border>
-      </Grid>
-    </Grid>
+    <Border Grid.Row="2" Background="{StaticResource Tief}" CornerRadius="10" Padding="4" MinHeight="120">
+      <ScrollViewer x:Name="ScrollProtokoll" VerticalScrollBarVisibility="Auto">
+        <TextBox x:Name="TxtProtokoll" Background="Transparent" Foreground="__PROTOKOLL__"
+                 BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12"
+                 IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" Padding="12,8"
+                 Text="Bereit. Nichts wird verändert, bevor eine Schaltfläche gedrückt wird."/>
+      </ScrollViewer>
+    </Border>
 
     <ProgressBar x:Name="Fortschritt" Grid.Row="3" Height="5" Margin="0,14,0,0"
                  IsIndeterminate="False" Background="{StaticResource Karte}"
@@ -544,30 +362,10 @@ $xamlText = @'
       <TextBlock x:Name="TxtStatus" Text="" VerticalAlignment="Center"
                  Foreground="{StaticResource SchriftLei}" FontSize="12" TextWrapping="Wrap"/>
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-        <Button x:Name="BtnProtokoll" Style="{StaticResource KnopfLeise}">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE8A5;"/>
-            <TextBlock x:Name="TxtBtnProtokoll" Text="Protokoll" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-          </StackPanel>
-        </Button>
-        <Button x:Name="BtnSchliessen" Style="{StaticResource KnopfLeise}">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE711;"/>
-            <TextBlock x:Name="TxtBtnSchliessen" Text="Schließen" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-          </StackPanel>
-        </Button>
-        <Button x:Name="BtnPruefen" Style="{StaticResource KnopfLeise}">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE7B3;"/>
-            <TextBlock x:Name="TxtBtnPruefen" Text="Nur nachsehen" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-          </StackPanel>
-        </Button>
-        <Button x:Name="BtnStart" Style="{StaticResource KnopfStark}">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE895;"/>
-            <TextBlock x:Name="TxtBtnStart" Text="Aktualisieren" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-          </StackPanel>
-        </Button>
+        <Button x:Name="BtnProtokoll"  Style="{StaticResource KnopfLeise}" Content="Protokoll öffnen"/>
+        <Button x:Name="BtnSchliessen" Style="{StaticResource KnopfLeise}" Content="Schließen"/>
+        <Button x:Name="BtnPruefen"    Style="{StaticResource KnopfLeise}" Content="Nur nachsehen"/>
+        <Button x:Name="BtnStart"      Style="{StaticResource KnopfStark}" Content="Aktualisieren"/>
       </StackPanel>
     </Grid>
   </Grid>
@@ -614,14 +412,14 @@ $Palette = if ($AppsHell) {
        AKZENT = '#FF7C6AF5'; AKZENTTEXT = '#FF5B47D6'
        AKZENTKNOPF = '#FF5B47D6'; AKZENTKNOPFH = '#FF4C3AC0'
        BAHN = '#FF7A7A8E'; KNAUF = '#FFFFFFFF'; KNOPF = '#FFE8E8EE'; KNOPFHOVER = '#FFDCDCE6'
-       GUT = '#FF166534'; SCHLECHT = '#FFB91C1C'; WARN = '#FF92400E' }
+       GUT = '#FF166534'; SCHLECHT = '#FFB91C1C' }
 } else {
     @{ GRUND = '#FF17171B'; KARTE = '#FF22222A'; TIEF = '#FF101014'
        SCHRIFT = '#FFF2F2F5'; SCHRIFTLEI = '#FF9A9AA8'; PROTOKOLL = '#FFC8C8D2'
        AKZENT = '#FF7C6AF5'; AKZENTTEXT = '#FFA99EF8'
        AKZENTKNOPF = '#FF5B47D6'; AKZENTKNOPFH = '#FF6F5BE4'
        BAHN = '#FF5A5A6C'; KNAUF = '#FFE6E6EC'; KNOPF = '#FF2E2E38'; KNOPFHOVER = '#FF3A3A46'
-       GUT = '#FF4ADE80'; SCHLECHT = '#FFF87171'; WARN = '#FFFBBF24' }
+       GUT = '#FF4ADE80'; SCHLECHT = '#FFF87171' }
 }
 foreach ($schluessel in $Palette.Keys) {
     $xamlText = $xamlText.Replace("__${schluessel}__", $Palette[$schluessel])
@@ -638,14 +436,7 @@ $fenster = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReade
 $E = @{}
 foreach ($name in @('TxtHardware','TxtLetzterLauf','LinkMelucio','ChkWinget','ChkChoco','ChkWindows','ChkStore','ChkTreiber',
                     'TxtProtokoll','ScrollProtokoll','LiveRahmen','TxtLive','Fortschritt','TxtStatus','TxtZeit','BtnZeit','TxtAufgabe',
-                    'BtnProtokoll','BtnSchliessen','BtnPruefen','BtnStart',
-                    'ZeileNeueFassung','TxtNeueFassung','LinkNeueFassung','TxtLinkSeite','LinkUpdateSeite',
-                    'BtnNeueFassung','BtnFassungSpaeter',
-                    'PanelEinstellungen','KarteErgebnis','StreifenErgebnis','TxtZahl','TxtErgebnis','TxtErgebnisZeit','PanelDetails',
-                    'TxtIconErgebnis','KachelEinstellungen','KachelVerlauf','KachelProtokolle','TxtKachelEinst','TxtKachelVerlauf',
-                    'TxtKachelProto','TxtKachelProtoZeit','TxtBtnFilterFehler',
-                    'BtnAnsichtVerlauf','BtnAnsichtProtokoll','BtnFilterAlles','BtnFilterFehler',
-                    'PanelVerlauf','PanelProtokoll','RtfProtokoll')) {
+                    'BtnProtokoll','BtnSchliessen','BtnPruefen','BtnStart')) {
     $E[$name] = $fenster.FindName($name)
     if ($null -eq $E[$name]) { throw "Element fehlt im XAML: $name" }
 }
@@ -656,7 +447,6 @@ foreach ($name in @('TxtHardware','TxtLetzterLauf','LinkMelucio','ChkWinget','Ch
 
 function Schreibe {
     param([string]$Zeile)
-    if ($Zeile -match '^(Aktualisiert|Updated):.*\((\d+) [^)]*\)\s*$') { $script:LaufAnzahl += [int]$Matches[2] }
     $E.TxtProtokoll.AppendText("`r`n$Zeile")
     $E.ScrollProtokoll.ScrollToEnd()
     # Live-Fenster: nur die letzten LIVE_ZEILEN, leere Zeilen zaehlen nicht.
@@ -675,14 +465,7 @@ function Schreibe {
 function Setze-Beschaeftigt {
     param([bool]$Ja, [string]$Text = '', [switch]$Gut, [switch]$Schlecht)
     $E.Fortschritt.IsIndeterminate = $Ja
-    if ($Ja) {
-        $Live.Clear(); $E.TxtLive.Text = ''
-        $script:LaufAnzahl = 0
-        # Das Live-Fenster gehoert zu den Details: nur zeigen, wenn die offen sind.
-        $E.LiveRahmen.Visibility = if (Details-Offen) { 'Visible' } else { 'Collapsed' }
-        Zeige-Ergebnis -Zahl ([string][char]0x2026) -Satz 'Läuft …' -Zeit 'Das dauert einige Minuten.' -Ton 'neutral'
-    }
-    Aktualisiere-Kacheln
+    if ($Ja) { $Live.Clear(); $E.TxtLive.Text = ''; $E.LiveRahmen.Visibility = 'Visible' }
     $E.TxtStatus.Text = $Text
     $E.TxtStatus.Foreground = if ($Schlecht) { $fenster.FindResource('Schlecht') }
                               elseif ($Gut)  { $fenster.FindResource('Gut') }
@@ -925,7 +708,6 @@ $Takt.Add_Tick({
             Schreibe $schluss.Protokoll
             if ($schluss.Gut) { Setze-Beschaeftigt $false $schluss.Status -Gut }
             else              { Setze-Beschaeftigt $false $schluss.Status -Schlecht }
-            Zeige-LaufErgebnis $schluss $Lauf.art $script:LaufAnzahl $dauer
             return
         }
 
@@ -1023,34 +805,13 @@ $E.BtnZeit.Add_Click({
 })
 
 $E.BtnProtokoll.Add_Click({
-    if (-not (Test-Path $LogPfad)) { $E.TxtStatus.Text = 'Noch kein Protokoll vorhanden.'; return }
-    if ($AnsichtGeladen) {
-        # In der App, schoen gesetzt (Davids Wunsch 08.10.2026).
-        Zeige-Details $true 'protokoll'
-    } else {
-        # Ohne das Ansicht-Modul wie frueher: Kopie im Editor.
+    # Der Kern baut die Ansicht "neueste Läufe oben" und öffnet sie.
+    if (Test-Path $LogPfad) {
         Start-Process -FilePath $ExePfad -WindowStyle Hidden -ArgumentList @(
             '-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$Kern`"",'-ProtokollAnzeigen')
     }
+    else { $E.TxtStatus.Text = 'Noch kein Protokoll vorhanden.' }
 })
-$E.BtnAnsichtVerlauf.Add_Click({ Setze-Ansicht 'verlauf'; Aktualisiere-Kacheln })
-$E.BtnAnsichtProtokoll.Add_Click({ Setze-Ansicht 'protokoll'; Aktualisiere-Kacheln })
-$E.BtnFilterAlles.Add_Click({ $script:FilterFehler = $false; Zeige-ProtokollAnsicht })
-$E.BtnFilterFehler.Add_Click({ $script:FilterFehler = $true; Zeige-ProtokollAnsicht })
-# Die vier kleinen Karten oben: Einstellungen, Verlauf und Protokoll schalten ihr
-# Feld, die erste zeigt nur das Ergebnis.
-$E.KachelEinstellungen.Add_Click({
-    $E.PanelEinstellungen.Visibility = if ($E.PanelEinstellungen.Visibility -eq 'Visible') { 'Collapsed' } else { 'Visible' }
-    Aktualisiere-Kacheln
-})
-$E.KachelVerlauf.Add_Click({
-    if ((Details-Offen) -and $script:AnsichtModus -eq 'verlauf') { Zeige-Details $false } else { Zeige-Details $true 'verlauf' }
-})
-$E.KachelProtokolle.Add_Click({
-    if (-not (Test-Path $LogPfad)) { $E.TxtStatus.Text = 'Noch kein Protokoll vorhanden.'; return }
-    if ((Details-Offen) -and $script:AnsichtModus -eq 'protokoll') { Zeige-Details $false } else { Zeige-Details $true 'protokoll' }
-})
-foreach ($c in @($E.ChkWinget, $E.ChkChoco, $E.ChkWindows, $E.ChkStore, $E.ChkTreiber)) { $c.Add_Click({ Aktualisiere-Kacheln }) }
 
 # Ein Hyperlink in WPF oeffnet von sich aus GAR NICHTS - ohne diesen Handler
 # ist er nur blauer Text. Die Adresse steht fest im Fenster, es kommt nichts
@@ -1123,186 +884,6 @@ function Zeige-Aufgabe {
         $text += "`nLäuft mit niedriger Priorität ($($prio.Value)). Ein Klick auf Übernehmen stellt auf normal um."
     }
     $E.TxtAufgabe.Text = $text
-}
-
-# ---------------------------------------------------------------------------
-#  Ergebniskarte (Standardansicht) und Protokoll-Ansicht
-# ---------------------------------------------------------------------------
-$script:LaufAnzahl = 0
-$script:AnsichtModus = 'verlauf'
-$script:FilterFehler = $false
-
-function Details-Offen { return ($E.PanelDetails.Visibility -eq 'Visible') }
-
-function Zeige-Details {
-    param([bool]$Ja, [string]$Modus = '')
-    $E.PanelDetails.Visibility = if ($Ja) { 'Visible' } else { 'Collapsed' }
-    if ($Ja) {
-        Setze-Ansicht $(if ($Modus) { $Modus } else { $script:AnsichtModus })
-        if ($E.Fortschritt.IsIndeterminate) { $E.LiveRahmen.Visibility = 'Visible' }
-    } else {
-        $E.LiveRahmen.Visibility = 'Collapsed'
-    }
-    Aktualisiere-Kacheln
-}
-
-function Aktualisiere-Kacheln {
-    # Zahl der aktiven Quellen und welche Kachel gerade aufgeklappt ist.
-    $n = @($E.ChkWinget, $E.ChkChoco, $E.ChkWindows, $E.ChkStore, $E.ChkTreiber | Where-Object { $_.IsChecked }).Count
-    $E.TxtKachelEinst.Text = "$n von 5"
-    $E.TxtKachelVerlauf.Text = if ($E.Fortschritt.IsIndeterminate) { 'läuft gerade' } else { 'dieser Sitzung' }
-    $rahmen = @{
-        KachelEinstellungen = ($E.PanelEinstellungen.Visibility -eq 'Visible')
-        KachelVerlauf       = ((Details-Offen) -and $script:AnsichtModus -eq 'verlauf')
-        KachelProtokolle    = ((Details-Offen) -and $script:AnsichtModus -eq 'protokoll')
-    }
-    foreach ($k in $rahmen.Keys) {
-        # Der Rahmen steckt in der Vorlage; die Stellung zeigt die Hintergrundfarbe.
-        if ($rahmen[$k]) { $E[$k].Background = $fenster.FindResource('Tief') }
-        else { $E[$k].ClearValue([System.Windows.Controls.Control]::BackgroundProperty) }
-    }
-}
-
-function Zeige-Ergebnis {
-    param([string]$Zahl, [string]$Satz, [string]$Zeit = '', [string]$Ton = 'neutral')
-    $schluessel = switch ($Ton) { 'gut' { 'Gut' } 'warn' { 'Warn' } 'schlecht' { 'Schlecht' } default { 'SchriftLei' } }
-    $pinsel = $fenster.FindResource($schluessel)
-    $E.TxtZahl.Text = $Zahl
-    $E.TxtZahl.Foreground = $pinsel
-    $glyph = switch ($Ton) { 'gut' { 0xE73E } 'warn' { 0xE7BA } 'schlecht' { 0xE783 } default { 0xE895 } }
-    $E.TxtIconErgebnis.Text = [string][char]$glyph
-    $E.TxtIconErgebnis.Foreground = $pinsel
-    $E.StreifenErgebnis.Background = $pinsel
-    $E.TxtErgebnis.Text = $Satz
-    $E.TxtErgebnisZeit.Text = $Zeit
-    $E.TxtErgebnisZeit.Visibility = if ($Zeit) { 'Visible' } else { 'Collapsed' }
-}
-
-# Beim Oeffnen: aus dem Protokoll, was der letzte stille Lauf tat.
-function Zeige-LetztenLaufKarte {
-    if (-not $AnsichtGeladen) { return }
-    try {
-        if (-not (Test-Path $LogPfad)) {
-            Zeige-Ergebnis -Zahl ([string][char]0x2013) -Satz 'Noch kein Protokoll vorhanden.' -Ton 'neutral'
-            return
-        }
-        $zeilen = Get-Content -Path $LogPfad -Tail 400 -Encoding UTF8 -ErrorAction Stop
-        $lauf = Get-LetzterLauf (ConvertTo-ProtokollEintraege $zeilen)
-        $karte = Bilde-ErgebnisKarte $lauf
-        $zeit = ''
-        if ($lauf.Gefunden -and $lauf.Wann -match '^(\d{4})-(\d\d)-(\d\d) (\d\d:\d\d)') {
-            $zeit = "Letzter stiller Lauf: $($Matches[3]).$($Matches[2]).$($Matches[1]) um $($Matches[4]) Uhr"
-        }
-        Zeige-Ergebnis -Zahl $karte.Zahl -Satz $karte.Satz -Zeit $zeit -Ton $karte.Ton
-        $n = Get-LaufAnzahl (ConvertTo-ProtokollEintraege $zeilen)
-        $E.TxtKachelProto.Text = if ($n -eq 1) { '1 Lauf' } else { "$n Läufe" }
-        $E.TxtKachelProtoZeit.Text = if ($lauf.Gefunden -and $lauf.Wann -match '^\d{4}-(\d\d)-(\d\d)') { "zuletzt $($Matches[2]).$($Matches[1])." } else { 'im Protokoll' }
-        # Die Kopfzeile sagt dasselbe: nicht doppelt zeigen.
-        $E.TxtLetzterLauf.Visibility = 'Collapsed'
-    } catch {
-        Zeige-Ergebnis -Zahl ([string][char]0x2013) -Satz 'Protokoll konnte nicht gelesen werden.' -Ton 'neutral'
-    }
-}
-
-# Nach einem Lauf im Fenster: Zahl aus der Ausgabe, sonst Haken oder Ausrufezeichen.
-function Zeige-LaufErgebnis {
-    param($Schluss, [string]$Art, [int]$Anzahl, [double]$Minuten)
-    if ($Schluss.Gut) {
-        if ($Art -eq 'pruefen') {
-            Zeige-Ergebnis -Zahl ([string][char]0x2713) -Satz 'Nachgesehen. Es wurde nichts verändert.' -Ton 'gut'
-        } elseif ($Anzahl -gt 0) {
-            $satz = if ($Anzahl -eq 1) { 'Es gab 1 Update, erfolgreich installiert.' } else { "Es gab $Anzahl Updates, alle erfolgreich installiert." }
-            Zeige-Ergebnis -Zahl "$Anzahl" -Satz $satz -Zeit "Fertig nach $Minuten Minuten." -Ton 'gut'
-        } else {
-            Zeige-Ergebnis -Zahl ([string][char]0x2713) -Satz 'Fertig. Nichts war zu aktualisieren oder alles ist durch.' -Zeit "Nach $Minuten Minuten." -Ton 'gut'
-        }
-    } else {
-        Zeige-Ergebnis -Zahl '!' -Satz $Schluss.Status -Zeit 'Einzelheiten unter Details.' -Ton 'schlecht'
-    }
-}
-
-function Setze-Ansicht {
-    param([string]$Modus)
-    $script:AnsichtModus = $Modus
-    $proto = ($Modus -eq 'protokoll')
-    $E.PanelVerlauf.Visibility   = if ($proto) { 'Collapsed' } else { 'Visible' }
-    $E.PanelProtokoll.Visibility = if ($proto) { 'Visible' } else { 'Collapsed' }
-    $E.BtnFilterAlles.Visibility  = if ($proto) { 'Visible' } else { 'Collapsed' }
-    $E.BtnFilterFehler.Visibility = if ($proto) { 'Visible' } else { 'Collapsed' }
-    Markiere-Knopf $E.BtnAnsichtVerlauf (-not $proto)
-    Markiere-Knopf $E.BtnAnsichtProtokoll $proto
-    if ($proto) { Zeige-ProtokollAnsicht }
-}
-
-function Markiere-Knopf {
-    # Der gewaehlte Knopf der Gruppe steht in der Aktionsfarbe, die anderen leise.
-    param($Knopf, [bool]$Aktiv)
-    if ($Aktiv) {
-        $Knopf.Background = $fenster.FindResource('AkzentKnopf')
-        $Knopf.Foreground = [System.Windows.Media.Brushes]::White
-    } else {
-        $Knopf.ClearValue([System.Windows.Controls.Button]::BackgroundProperty)
-        $Knopf.ClearValue([System.Windows.Controls.Button]::ForegroundProperty)
-    }
-}
-
-function Zeige-ProtokollAnsicht {
-    if (-not $AnsichtGeladen -or -not (Test-Path $LogPfad)) {
-        $E.TxtStatus.Text = 'Noch kein Protokoll vorhanden.'
-        return
-    }
-    try {
-        $zeilen = Get-Content -Path $LogPfad -Tail 2000 -Encoding UTF8 -ErrorAction Stop
-        $eintraege = ConvertTo-ProtokollEintraege $zeilen
-        $zaehler = Get-ProtokollZaehler $eintraege
-        $E.TxtBtnFilterFehler.Text = "Fehler ($($zaehler.Fehler))"
-        Markiere-Knopf $E.BtnFilterAlles (-not $script:FilterFehler)
-        Markiere-Knopf $E.BtnFilterFehler $script:FilterFehler
-        $tage = Gruppiere-ProtokollTage $eintraege -NurFehler:$script:FilterFehler
-
-        $doc = New-Object System.Windows.Documents.FlowDocument
-        $doc.PagePadding = New-Object System.Windows.Thickness(8, 4, 8, 4)
-        $doc.FontFamily = New-Object System.Windows.Media.FontFamily('Segoe UI')
-        $mono = New-Object System.Windows.Media.FontFamily('Cascadia Mono, Consolas')
-        $schrift = $fenster.FindResource('Schrift'); $lei = $fenster.FindResource('SchriftLei')
-        $farbe = @{ SUCCESS = $fenster.FindResource('Gut'); WARNING = $fenster.FindResource('Warn')
-                    ERROR = $fenster.FindResource('Schlecht'); INFO = $lei }
-        $fehlerFlaeche = New-Object System.Windows.Media.SolidColorBrush(
-            [System.Windows.Media.Color]::FromArgb(0x22, ($fenster.FindResource('Schlecht')).Color.R,
-                ($fenster.FindResource('Schlecht')).Color.G, ($fenster.FindResource('Schlecht')).Color.B))
-        if (@($tage).Count -eq 0) {
-            $p = New-Object System.Windows.Documents.Paragraph
-            $r = New-Object System.Windows.Documents.Run($(if ($script:FilterFehler) { 'Keine Fehler im Protokoll.' } else { 'Das Protokoll ist leer.' }))
-            $r.Foreground = $lei; [void]$p.Inlines.Add($r); [void]$doc.Blocks.Add($p)
-        }
-        foreach ($tag in $tage) {
-            $kopf = New-Object System.Windows.Documents.Paragraph
-            $kopf.Margin = New-Object System.Windows.Thickness(0, 12, 0, 4)
-            $kopf.BorderBrush = $lei
-            $kopf.BorderThickness = New-Object System.Windows.Thickness(0, 0, 0, 1)
-            $r = New-Object System.Windows.Documents.Run((Get-TagesKopf $tag.Datum).ToUpper())
-            $r.FontSize = 12; $r.FontWeight = 'SemiBold'; $r.Foreground = $lei
-            [void]$kopf.Inlines.Add($r); [void]$doc.Blocks.Add($kopf)
-            foreach ($ein in $tag.Eintraege) {
-                $p = New-Object System.Windows.Documents.Paragraph
-                $p.Margin = New-Object System.Windows.Thickness(0, 1, 0, 1)
-                $p.Padding = New-Object System.Windows.Thickness(4, 1, 4, 1)
-                if ($ein.Stufe -eq 'ERROR') { $p.Background = $fehlerFlaeche }
-                $zeit = New-Object System.Windows.Documents.Run($ein.Zeit)
-                $zeit.FontFamily = $mono; $zeit.FontSize = 12; $zeit.Foreground = $lei
-                $zeichen = New-Object System.Windows.Documents.Run('  ' + (Get-StufenZeichen $ein.Stufe) + '  ')
-                $zeichen.FontFamily = New-Object System.Windows.Media.FontFamily('Segoe UI Symbol')
-                $zeichen.Foreground = $farbe[$ein.Stufe]
-                $text = New-Object System.Windows.Documents.Run($ein.Text)
-                $text.Foreground = $schrift
-                [void]$p.Inlines.Add($zeit); [void]$p.Inlines.Add($zeichen); [void]$p.Inlines.Add($text)
-                [void]$doc.Blocks.Add($p)
-            }
-        }
-        $E.RtfProtokoll.Document = $doc
-    } catch {
-        $E.TxtStatus.Text = "Protokoll konnte nicht angezeigt werden: $($_.Exception.Message)"
-    }
 }
 
 function Lies-LetztenLauf {
@@ -1412,146 +993,7 @@ function Lade-Nebenher {
     $warten.Start()
 }
 
-# ---------------------------------------------------------------------------
-#  Neue Fassung (SELBST-UPDATE.md)
-# ---------------------------------------------------------------------------
-$script:NeueFassung = $null
-$SUStatus = @{ Bestaetigt = $false }
-
-function Zeige-NeueFassung {
-    param($Fassung, $Schalter)
-    $zustand = Lies-SelbstUpdateZustand $SelbstUpdateZustand
-    $aus = if ($zustand -and $zustand.PSObject.Properties['ausgeblendet']) { "$($zustand.ausgeblendet)" } else { '' }
-    if ($aus -and $aus -eq $Fassung.Tag) { return }     # "Später" gilt für diese Fassung
-    $script:NeueFassung = $Fassung
-    $E.TxtNeueFassung.Text = "Version $($Fassung.Version) ist verfügbar."
-    $E.LinkNeueFassung.NavigateUri = [uri]$Fassung.Notizen
-    $E.BtnNeueFassung.Visibility = if ($Schalter.Installieren) { 'Visible' } else { 'Collapsed' }
-    $E.TxtLinkSeite.Visibility   = if ($Schalter.Installieren) { 'Collapsed' } else { 'Visible' }
-    $E.ZeileNeueFassung.Visibility = 'Visible'
-}
-
-# Hoechstens einmal am Tag bei GitHub fragen; sonst den gemerkten Stand zeigen.
-# Die Abfrage laeuft in einem eigenen Faden (wie Lade-Nebenher): Das Fenster
-# darf dabei nicht stehen.
-function Pruefe-Neue-Fassung {
-    if (-not $SelbstUpdateGeladen) { return }
-    $schalter = Lies-SelbstUpdateSchalter $SkriptOrdner
-    if (-not $schalter.Pruefen) { return }
-    $zustand = Lies-SelbstUpdateZustand $SelbstUpdateZustand
-    if (Test-HeuteSchonGefragt $zustand) {
-        $f = Lies-GemerkteFassung $zustand
-        if ($f -and (Test-FassungNeuer $f.Tag $UpdaterVersion)) { Zeige-NeueFassung $f $schalter }
-        return
-    }
-    $rs = [runspacefactory]::CreateRunspace()
-    $rs.Open()
-    $rs.SessionStateProxy.SetVariable('Modul', $SelbstUpdateDatei)
-    $rs.SessionStateProxy.SetVariable('Ist', $UpdaterVersion)
-    $ps = [PowerShell]::Create()
-    $ps.Runspace = $rs
-    [void]$ps.AddScript({ . $Modul; Frage-NeuesteFassung $Ist })
-    $handle = $ps.BeginInvoke()
-    $warten = New-Object System.Windows.Threading.DispatcherTimer
-    $warten.Interval = [TimeSpan]::FromMilliseconds(300)
-    $warten.Add_Tick({
-        if (-not $handle.IsCompleted) { return }
-        $warten.Stop()
-        try {
-            $f = $ps.EndInvoke($handle) | Select-Object -First 1
-            if ($f -and -not (Test-FassungNeuer $f.Tag $UpdaterVersion)) { $f = $null }
-            $alt = Lies-SelbstUpdateZustand $SelbstUpdateZustand
-            $aus = if ($alt -and $alt.PSObject.Properties['ausgeblendet']) { "$($alt.ausgeblendet)" } else { '' }
-            Schreibe-SelbstUpdateZustand $SelbstUpdateZustand $f $aus
-            if ($f) { Zeige-NeueFassung $f $schalter }
-        } catch { } finally { $ps.Dispose(); $rs.Dispose() }
-    }.GetNewClosure())
-    $warten.Start()
-}
-
-$E.BtnFassungSpaeter.Add_Click({
-    if ($script:NeueFassung) {
-        $z = Lies-SelbstUpdateZustand $SelbstUpdateZustand
-        Schreibe-SelbstUpdateZustand $SelbstUpdateZustand (Lies-GemerkteFassung $z) $script:NeueFassung.Tag
-    }
-    $E.ZeileNeueFassung.Visibility = 'Collapsed'
-})
-
-foreach ($l in @($E.LinkNeueFassung, $E.LinkUpdateSeite)) {
-    $l.Add_RequestNavigate({
-        param($absender, $ereignis)
-        # Die Adresse kommt aus Waehle-Fassung (fester Anfang) oder steht fest im Fenster.
-        try { Start-Process $ereignis.Uri.AbsoluteUri } catch { }
-        $ereignis.Handled = $true
-    })
-}
-
-# Installieren: zwei Klicks, solange das Setup unsigniert ist (Rueckfrage im
-# Fenster, kein Dialog). Laden, Pruefen und Starten laufen in einem eigenen
-# Faden; das Fenster schliesst sich erst, wenn das Setup durch ist, und wird
-# danach neu geoeffnet.
-$E.BtnNeueFassung.Add_Click({
-    if (-not $script:NeueFassung -or $Lauf.kind -gt 0) { return }
-    # Nicht nur "Knopf unsichtbar": Der Schalter wird hier noch einmal gelesen.
-    if (-not (Lies-SelbstUpdateSchalter $SkriptOrdner).Installieren) { return }
-    $signiert = [bool]$script:SU_SignaturAussteller
-    if (-not $signiert -and -not $SUStatus.Bestaetigt) {
-        $SUStatus.Bestaetigt = $true
-        $E.TxtNeueFassung.Text = 'Das Setup ist noch nicht signiert; Windows meldet evtl. einen unbekannten Herausgeber. Die Prüfsumme wird vor dem Start geprüft.'
-        $E.BtnNeueFassung.Content = 'Ja, installieren'
-        return
-    }
-    $tagNeu = $script:NeueFassung.Tag
-    $E.BtnNeueFassung.IsEnabled = $false
-    $E.BtnFassungSpaeter.IsEnabled = $false
-    $E.TxtNeueFassung.Text = 'Wird geladen und installiert …'
-    $rs = [runspacefactory]::CreateRunspace()
-    $rs.Open()
-    $rs.SessionStateProxy.SetVariable('Modul', $SelbstUpdateDatei)
-    $rs.SessionStateProxy.SetVariable('Fassung', $script:NeueFassung)
-    $rs.SessionStateProxy.SetVariable('Ordner', $SelbstUpdateOrdner)
-    $rs.SessionStateProxy.SetVariable('Unsig', (-not $signiert))
-    $ps = [PowerShell]::Create()
-    $ps.Runspace = $rs
-    [void]$ps.AddScript({
-        . $Modul
-        try {
-            $d = Lade-Setup $Fassung $Ordner
-            Installiere-Setup -Pfad $d.Pfad -ErwarteteSumme $d.Summe -UnsigniertErlaubt:$Unsig
-        } catch {
-            @{ Gestartet = $false; ExitCode = $null; Meldung = "Nicht geladen: $($_.Exception.Message)" }
-        }
-    })
-    $handle = $ps.BeginInvoke()
-    $warten = New-Object System.Windows.Threading.DispatcherTimer
-    $warten.Interval = [TimeSpan]::FromMilliseconds(500)
-    $warten.Add_Tick({
-        if (-not $handle.IsCompleted) { return }
-        $warten.Stop()
-        $erg = $null
-        try { $erg = $ps.EndInvoke($handle) | Select-Object -First 1 } catch { }
-        $ps.Dispose(); $rs.Dispose()
-        $ok = $erg -and $erg.Gestartet -and $erg.ExitCode -eq 0
-        try {
-            $zeile = '[{0}] [GUI] [{1}] Selbst-Update auf {2}: {3}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),
-                     $(if ($ok) { 'INFO' } else { 'ERROR' }), $tagNeu, $(if ($erg) { $erg.Meldung } else { 'keine Antwort' })
-            Add-Content -Path $LogPfad -Value $zeile -Encoding UTF8
-        } catch { }
-        if ($ok) {
-            Start-Process -FilePath (Join-Path $SkriptOrdner 'update-manager-gui.bat') -WorkingDirectory $SkriptOrdner
-            $fenster.Close()
-            return
-        }
-        $E.TxtNeueFassung.Text = "Nicht installiert: $(if ($erg) { $erg.Meldung } else { 'keine Antwort' }). Die bisherige Version bleibt."
-        $E.BtnNeueFassung.Content = 'Neue Version installieren'
-        $SUStatus.Bestaetigt = $false
-        $E.BtnNeueFassung.IsEnabled = $true
-        $E.BtnFassungSpaeter.IsEnabled = $true
-    }.GetNewClosure())
-    $warten.Start()
-})
-
-$fenster.Add_ContentRendered({ Zeige-LetztenLaufKarte; Aktualisiere-Kacheln; Lade-Nebenher; Pruefe-Neue-Fassung })
+$fenster.Add_ContentRendered({ Lade-Nebenher })
 
 if ($Abbild) {
     # NICHT das Fenster zeichnen, sondern seinen INHALT. Ein Window, das nie

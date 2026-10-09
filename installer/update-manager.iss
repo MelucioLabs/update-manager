@@ -15,6 +15,11 @@
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
+; Rein numerische Fassung (a.b.c.d) fuer die Versionsinfo der Datei; der
+; Workflow uebergibt sie aus dem Tag (v3.2.0-rc1 wird 3.2.0.0).
+#ifndef AppVersionNum
+  #define AppVersionNum "0.0.0.0"
+#endif
 #define AppName       "MelucioLabs Update-Manager"
 #define AppPublisher  "MelucioLabs"
 #define AppRepo       "https://github.com/MelucioLabs/update-manager"
@@ -53,10 +58,20 @@ ShowLanguageDialog=auto
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={#PsExe}
 SetupLogging=yes
+; Versionsinfo der Setup-Datei. Die SignPath Foundation verlangt, dass Produktname
+; und Produktversion in jeder signierten Datei gesetzt sind und gleich bleiben
+; (.signpath/artifact-configuration.xml prueft beides).
+VersionInfoCompany=MelucioLabs
+VersionInfoDescription={#AppName} Setup
+VersionInfoCopyright=Copyright (C) 2025-2026 MelucioLabs / David Vaupel
+VersionInfoProductName={#AppName}
+VersionInfoVersion={#AppVersionNum}
+VersionInfoProductVersion={#AppVersionNum}
+VersionInfoProductTextVersion={#AppVersionNum}
 
 [Languages]
-Name: "de"; MessagesFile: "compiler:Languages\German.isl"
-Name: "en"; MessagesFile: "compiler:Default.isl"
+Name: "de"; MessagesFile: "compiler:Languages\German.isl"; InfoBeforeFile: "datenschutz-de.txt"
+Name: "en"; MessagesFile: "compiler:Default.isl"; InfoBeforeFile: "datenschutz-en.txt"
 
 [CustomMessages]
 de.GruppeHintergrund=Hintergrund:
@@ -83,8 +98,6 @@ Name: "hintergrund"; Description: "{cm:TaskHintergrund}"; GroupDescription: "{cm
 ; Deinstallation an. Damit uebersteht die Datei jedes Update.
 Source: "..\universal-update-manager.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\update-manager-gui.ps1";       DestDir: "{app}"; Flags: ignoreversion
-Source: "..\selbst-update.ps1";          DestDir: "{app}"; Flags: ignoreversion
-Source: "..\protokoll-ansicht.ps1";       DestDir: "{app}"; Flags: ignoreversion
 Source: "..\universal-update-manager.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\update-manager-gui.bat";       DestDir: "{app}"; Flags: ignoreversion
 Source: "..\update-config.json";           DestDir: "{app}"; Flags: ignoreversion
@@ -92,6 +105,7 @@ Source: "..\probe.ps1";                    DestDir: "{app}"; Flags: ignoreversio
 Source: "..\LICENSE";                      DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md";                    DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README_DE.md";                 DestDir: "{app}"; Flags: ignoreversion
+Source: "..\CODE-SIGNING-POLICY.md";      DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Die Verknuepfung zeigt auf die .bat und NICHT direkt auf powershell.exe:
