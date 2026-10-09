@@ -23,8 +23,9 @@
 # Exit-Code: 0 = alles gelaufen, 1 = mindestens eine Quelle mit Fehler,
 #            2 = falscher Aufruf.
 
-# Die pruefe_*-Funktionen werden ueber ihren Namen aufgerufen.
-# shellcheck disable=SC2329
+# Die pruefe_*-Funktionen werden ueber ihren Namen aufgerufen (aeltere ShellCheck-
+# Versionen melden das als SC2317, neuere als SC2329).
+# shellcheck disable=SC2329,SC2317
 set -u
 
 UM_VERSION="1.0.0"
