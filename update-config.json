@@ -1,0 +1,87 @@
+{
+  "lastUpdated": "2026-02-21",
+  "silentMode": {
+    "scheduledTaskName": "UpdateManager-SilentMode",
+    "comment": "Einstellungen fuer den automatischen Hintergrund-Modus (Winget + Chocolatey)"
+  },
+  "selbstUpdate": {
+    "pruefen": true,
+    "installieren": false,
+    "comment": "pruefen: Das Fenster fragt hoechstens einmal am Tag bei GitHub (api.github.com, nur dieses Repo) nach der neuesten Fassung und zeigt einen Hinweis; geladen wird dabei nichts. installieren: schaltet den Knopf 'Neue Version installieren' frei. Vorgabe AUS, solange das Setup nicht signiert ist (SELBST-UPDATE.md). Eigene Werte gehoeren in update-config.local.json."
+  },
+  "benachrichtigung": {
+    "enabled": false,
+    "url": "",
+    "authDatei": "%USERPROFILE%\\.ntfy-auth",
+    "comment": "Meldung bei einem NAECHTLICHEN Lauf mit Fehlern, sonst nie. Eigene Werte gehoeren in update-config.local.json, nicht hierher: Diese Datei liegt im Repo. authDatei enthaelt eine Zeile benutzer:passwort."
+  },
+  "updateSources": {
+    "winget": {
+      "enabled": true,
+      "autoAccept": false,
+      "timeoutSeconds": 1800,
+      "includeUnknown": true,
+      "comment": "autoAccept: false = Benutzer wird vor jedem Update gefragt. timeoutSeconds galt fuer 'upgrade --all' INSGESAMT und stand auf 300: gemessen brauchte ein normaler Lauf 4:28 min, mit einem grossen Paket (Chrome) riss er die Grenze und wurde mitten im Installieren abgeschnitten - danach war nichts aktualisiert. 1800 ist kein Freibrief, sondern eine Notbremse gegen ein haengendes winget."
+    },
+    "chocolatey": {
+      "enabled": true,
+      "autoAccept": false,
+      "timeoutSeconds": 90,
+      "comment": "autoAccept: false = Benutzer wird vor jedem Update gefragt"
+    },
+    "windowsUpdate": {
+      "enabled": true,
+      "includeDrivers": true,
+      "includeOptional": false,
+      "timeoutSeconds": 120,
+      "comment": "includeDrivers: true = Treiber-Updates werden mit installiert"
+    },
+    "microsoftStore": {
+      "enabled": true,
+      "comment": "Store oeffnet sich, Update erfolgt manuell"
+    }
+  },
+  "hardwareVendors": {
+    "nvidia": {
+      "enabled": true,
+      "nvidiaAppPath": "C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA App.exe",
+      "nvidiaAppAlternativePaths": [
+        "C:\\Program Files (x86)\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA App.exe"
+      ],
+      "geforceExperiencePath": "C:\\Program Files\\NVIDIA Corporation\\NVIDIA GeForce Experience\\NVIDIA GeForce Experience.exe",
+      "alternativePaths": [
+        "C:\\Program Files (x86)\\NVIDIA Corporation\\NVIDIA GeForce Experience\\NVIDIA GeForce Experience.exe"
+      ],
+      "comment": "NVIDIA App (neu) hat Prioritaet, GeForce Experience als Fallback"
+    },
+    "amd": {
+      "enabled": true,
+      "radeonSoftwarePath": "C:\\Program Files\\AMD\\CNext\\CNext\\RadeonSoftware.exe",
+      "alternativePaths": [
+        "C:\\Program Files\\AMD\\CNext\\CNext\\AMDRSServ.exe",
+        "C:\\Program Files (x86)\\AMD\\CNext\\CNext\\RadeonSoftware.exe"
+      ],
+      "downloadUrl": "https://www.amd.com/de/support",
+      "comment": "AMD Radeon Software fuer GPU-Treiber"
+    },
+    "intel": {
+      "enabled": true,
+      "dsaPath": "C:\\Program Files (x86)\\Intel\\Driver and Support Assistant\\DSATray.exe",
+      "alternativePaths": [
+        "C:\\Program Files\\Intel\\Driver and Support Assistant\\DSATray.exe",
+        "C:\\Program Files (x86)\\Intel\\Driver & Support Assistant\\DSATray.exe"
+      ],
+      "dsaDownloadUrl": "https://www.intel.com/content/www/us/en/support/detect.html",
+      "comment": "CPU-Treiber werden meist via Windows Update aktualisiert"
+    },
+    "msi": {
+      "enabled": true,
+      "centerPath": "C:\\Program Files (x86)\\MSI\\MSI Center\\MSICenter.exe",
+      "alternativePaths": [
+        "C:\\Program Files\\MSI\\MSI Center\\MSICenter.exe"
+      ],
+      "downloadUrl": "https://www.msi.com/Landing/msi-center",
+      "comment": "Wird nur genutzt wenn MSI-Mainboard erkannt wird"
+    }
+  }
+}

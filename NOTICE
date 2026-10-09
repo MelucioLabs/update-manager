@@ -1,0 +1,24 @@
+Update-Manager
+Copyright (C) 2025-2026 MelucioLabs / David Vaupel
+
+Dieses Programm ist freie Software: Es darf unter den Bedingungen der GNU
+General Public License, Version 3 oder (nach Wahl) jeder späteren Version
+weitergegeben und verändert werden (SPDX-License-Identifier: GPL-3.0-or-later).
+Es wird in der Hoffnung verbreitet, dass es nützlich ist, aber OHNE JEDE
+GEWÄHRLEISTUNG. Der Lizenztext steht in der Datei LICENSE.
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. It is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY. The license text is in the file LICENSE.
+
+Name und Marke / Name and trademark
+Die Lizenz gilt für den Quelltext. Name und Marke „MelucioLabs“ (samt Logos und
+Markenfarben) gehören nicht zur freien Lizenz. Veränderte Fassungen dürfen nicht
+unter diesem Namen oder dieser Marke so weitergegeben werden, dass der Eindruck
+entsteht, sie stammten von MelucioLabs.
+The license covers the source code. The name and mark "MelucioLabs" (including
+logos and brand colors) are not part of the free license. Modified versions
+must not be passed on under this name or mark in a way that suggests they come
+from MelucioLabs.

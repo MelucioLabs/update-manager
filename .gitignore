@@ -1,0 +1,9 @@
+# Gilt im Monorepo für diesen Ordner und im öffentlichen Repo für alles.
+# Die Einstellungen einer Maschine, Protokolle und Zugangsdaten gehören nie
+# ins Repo; der Spiegel-Workflow schließt sie zusätzlich aus.
+update-config.local.json
+*.local.json
+*.log
+.ntfy-auth
+# Ergebnis von iscc
+dist/
