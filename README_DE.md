@@ -291,6 +291,35 @@ eine Zeile unter der Hardware („Letzter stiller Lauf: … — 3 Updates"), sam
 Fehlerzahl, wenn es welche gab. Ein Lauf ohne Fenster ist sonst unsichtbar, bis
 jemand von sich aus das Protokoll öffnet.
 
+### Kurzprotokoll und BIOS-Stand (seit 29.10.2026)
+
+**Kürzer:** Routinezeilen (Konfiguration geladen, Internet OK, Hardware,
+Winget-Listen) stehen nur noch auf der Konsole. Warnungen und Fehler werden nie
+herausgefiltert. Am Ende jedes Laufs steht eine kleine Übersicht:
+
+```
+Übersicht (2.1 min)
+  Winget      WARNUNG  6 aktualisiert; Winget: nicht aktualisiert, bleibt offen: UltraVNC
+  Chocolatey  OK       Aktualisiert: chocolatey (1 Updates)
+  Windows     FEHLER   Windows Update antwortet nicht (Timeout) ...  [Neustart nötig]
+  BIOS        OK       LENOVO 21MA000RGE, BIOS R2JET48W(1.25 ) ... Aktuell
+```
+
+Wieder alles in der Datei: `"protokoll": { "ausfuehrlich": true }` in
+`update-config.local.json`. Code: `protokoll-kurz.ps1`.
+
+**BIOS, nur lesen:** `-Auftrag bios` (und jeder volle Lauf) misst Hersteller,
+Modell, BIOS-Version und -Datum und fragt bei Lenovo den öffentlichen Katalog
+(`download.lenovo.com/catalog/<Typ>_Win11.xml`) nach dem neuesten BIOS. Ein
+neueres BIOS erscheint als **Warnung**, nie als Fehler. **Eingespielt wird nie
+etwas**, auch nicht nachts: Das bleibt Handarbeit mit Netzteil. Andere
+Hersteller als Lenovo: Der Bericht nennt den Stand und sagt, dass er die
+Aktualität nicht prüfen kann. Code: `bios-stand.ps1`.
+
+**Store und NVIDIA App:** Store-Updates stößt der Manager schon ohne Fenster an
+(MDM-Weg, braucht Administratorrechte). Für die NVIDIA App gibt es keinen
+dokumentierten stillen Weg; sie öffnet weiter ihr Fenster.
+
 ---
 
 ## Datei-Struktur

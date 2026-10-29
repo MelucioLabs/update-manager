@@ -261,7 +261,9 @@ if ((Test-Path $Kern) -and (Test-Path $Gui)) {
     } else {
         $vorspannZ = "`$LogFile = [System.IO.Path]::GetTempFileName()`n" +
                      "`$ColorSuccess='Green'; `$ColorError='Red'; `$ColorWarning='Yellow'; `$ColorInfo='Cyan'`n" +
-                     "`$Global:FehlerImLauf = 0`n" + $fnZaehl + "`n"
+                     "`$Global:FehlerImLauf = 0`n" +
+                     "`$Global:LaufZeilen = [System.Collections.Generic.List[object]]::new(); `$Global:LogQuelle = `$null`n" +
+                     "function Test-ProtokollRauschen { param(`$Message, `$Level) `$false }`n" + $fnZaehl + "`n"
         $nachspannZ = "`nRemove-Item -LiteralPath `$LogFile -ErrorAction SilentlyContinue`n`$code"
         $ohne = & ([scriptblock]::Create($vorspannZ + "Write-Log 'a' 'WARNING' 6>`$null; Write-Log 'b' 'SUCCESS' 6>`$null; `$code = Get-LaufExitCode" + $nachspannZ))
         $mit  = & ([scriptblock]::Create($vorspannZ + "Write-Log 'a' 'WARNING' 6>`$null; Write-Log 'b' 'ERROR' 6>`$null; `$code = Get-LaufExitCode" + $nachspannZ))
@@ -631,6 +633,9 @@ function Write-Log { param($m, $l = 'INFO')
     Add-Content -Path $LogFile -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [$l] $m" -Encoding UTF8 }
 function Test-AufgabeZeigtHierher { $true }
 function Write-Anlauf { }
+function Set-LogQuelle { param($Name) }
+function Show-BiosStand { $null }
+function Write-LaufUebersicht { param($Minuten) }
 function Get-ZeitgrenzeHinweis { param($Ergebnis) '' }
 function Test-WingetAvailable { $true }
 function Test-ChocoAvailable { $true }
@@ -1216,6 +1221,73 @@ if (-not (Test-Path $Ansicht)) {
     if ($liste2.Count -eq 0) { Melde 'ok' "Protokoll-Ansicht: Eintraege, Tage neueste zuerst, Fehlerfilter, Tageskopf und Ergebniskarte (gruen, gelb, rot, grau) stimmen" }
     else { foreach ($l in $liste2) { Schlecht "Protokoll-Ansicht: $l" } }
 }
+
+# ── 13. Kurzprotokoll und BIOS-Stand (protokoll-kurz.ps1, bios-stand.ps1) ──
+#
+# Beide Dateien werden vom Kern per Punkt-Aufruf geladen; fehlt eine, startet
+# der Kern nicht. BIOS wird nur GELESEN: Die Probe prueft deshalb auch, dass in
+# bios-stand.ps1 kein Aufruf steht, der etwas einspielt oder laedt.
+foreach ($datei in 'protokoll-kurz.ps1', 'bios-stand.ps1') {
+    $pfad13 = Join-Path $Ordner $datei
+    if (-not (Test-Path $pfad13)) { Schlecht "$datei fehlt"; continue }
+    $f = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseFile($pfad13, [ref]$null, [ref]$f)
+    $kopf = [System.IO.File]::ReadAllBytes($pfad13) | Select-Object -First 3
+    if ($f -and $f.Count -gt 0) { Schlecht "$datei hat Syntaxfehler: $($f[0].Message)" }
+    elseif (-not ($kopf.Count -ge 3 -and $kopf[0] -eq 0xEF -and $kopf[1] -eq 0xBB -and $kopf[2] -eq 0xBF)) { Schlecht "$datei hat KEIN BOM" }
+    else { Melde 'ok' "$datei laesst sich parsen, mit BOM" }
+    $iss13 = Join-Path $Ordner 'installer\update-manager.iss'
+    if ((Test-Path $iss13) -and ((Get-Content $iss13 -Raw) -notmatch [regex]::Escape($datei))) {
+        Schlecht "installer\update-manager.iss nimmt $datei nicht mit - der Manager startete nach dem Setup nicht"
+    }
+}
+$kern13 = Get-Content (Join-Path $Ordner 'universal-update-manager.ps1') -Raw
+if ($kern13 -notmatch "'bios'") { Schlecht "universal-update-manager.ps1: Auftrag 'bios' fehlt" }
+$bios13 = Get-Content (Join-Path $Ordner 'bios-stand.ps1') -Raw
+if ($bios13 -match '(?i)Start-Process|winuptp|Invoke-WebRequest[^\r\n]*-OutFile|Install-|msiexec|Start-BitsTransfer') {
+    Schlecht "bios-stand.ps1 enthaelt einen Aufruf, der etwas starten oder laden koennte: BIOS wird nur gemessen"
+}
+
+$ergebnisse13 = & {
+    function Write-Log { param($Message, $Level = 'INFO') }
+    . (Join-Path $Ordner 'protokoll-kurz.ps1')
+    . (Join-Path $Ordner 'bios-stand.ps1')
+    $r = New-Object System.Collections.Generic.List[string]
+    function Pruefe($ok, $text) { if (-not $ok) { $r.Add($text) } }
+
+    # BIOS-Versionen vergleichen (Lenovo-Schreibweise aus Win32_BIOS).
+    Pruefe ((ConvertTo-BiosZahl 'R2JET48W(1.25 )') -eq [version]'1.25') 'ConvertTo-BiosZahl liest R2JET48W(1.25 ) nicht'
+    Pruefe ((ConvertTo-BiosZahl '1.9') -lt (ConvertTo-BiosZahl '1.25')) 'Version 1.9 muss kleiner sein als 1.25 (Zahlen, nicht Text)'
+    Pruefe ($null -eq (ConvertTo-BiosZahl 'F.1b')) 'unlesbare Version muss $null geben'
+
+    # Rauschfilter: Routine raus, Warnungen und Fehler NIE.
+    Pruefe (Test-ProtokollRauschen 'Internetverbindung OK' 'SUCCESS') 'Routinezeile wird nicht herausgefiltert'
+    Pruefe (-not (Test-ProtokollRauschen 'Internetverbindung OK' 'ERROR')) 'ein Fehler darf nie gefiltert werden'
+    Pruefe (-not (Test-ProtokollRauschen 'Winget: nicht aktualisiert' 'WARNING')) 'eine Warnung darf nie gefiltert werden'
+    Pruefe (-not (Test-ProtokollRauschen 'Aktualisiert: A (1 Updates)' 'SUCCESS')) 'Aktualisiert-Zeile darf nicht gefiltert werden'
+    $Global:ProtokollAusfuehrlich = $true
+    Pruefe (-not (Test-ProtokollRauschen 'Internetverbindung OK' 'SUCCESS')) 'ausfuehrlich=true muss alles durchlassen'
+    $Global:ProtokollAusfuehrlich = $false
+
+    # Uebersicht
+    $z = @(
+        [pscustomobject]@{ Level = 'SUCCESS'; Text = 'Aktualisiert: A, B (2 Updates)'; Quelle = 'Winget' },
+        [pscustomobject]@{ Level = 'WARNING'; Text = 'Winget: nicht aktualisiert, bleibt offen: C'; Quelle = 'Winget' },
+        [pscustomobject]@{ Level = 'SUCCESS'; Text = 'Keine Updates verfuegbar'; Quelle = 'Chocolatey' },
+        [pscustomobject]@{ Level = 'ERROR'; Text = 'Windows Update antwortet nicht'; Quelle = 'Windows' },
+        [pscustomobject]@{ Level = 'WARNING'; Text = 'Neustart erforderlich fuer KB1'; Quelle = 'Windows' }
+    )
+    $t = @(Get-LaufUebersicht -Zeilen $z)
+    Pruefe ($t.Count -eq 3) "Uebersicht: $($t.Count) Zeilen statt 3"
+    Pruefe ($t[0].Quelle -eq 'Winget' -and $t[0].Status -eq 'WARNUNG' -and $t[0].Hinweis -like '2 aktualisiert*') "Winget-Zeile: $($t[0].Status) / $($t[0].Hinweis)"
+    Pruefe ($t[1].Status -eq 'OK') 'Chocolatey ohne Fund muss OK sein'
+    Pruefe ($t[2].Status -eq 'FEHLER' -and $t[2].Neustart) 'Windows: Fehler und Neustart muessen erkannt werden'
+    Pruefe (@(Get-LaufUebersicht -Zeilen @()).Count -eq 0) 'leerer Lauf muss eine leere Uebersicht geben'
+    , $r
+}
+$liste13 = @($ergebnisse13 | ForEach-Object { $_ })
+if ($liste13.Count -eq 0) { Melde 'ok' "Kurzprotokoll und BIOS: Versionsvergleich, Rauschfilter (Warnung/Fehler nie), Uebersicht mit Neustart" }
+else { foreach ($l in $liste13) { Schlecht "Kurzprotokoll/BIOS: $l" } }
 
 # ── 10. Konfiguration ───────────────────────────────────────────────────────
 if (-not (Test-Path $Konfig)) {

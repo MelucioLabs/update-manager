@@ -777,14 +777,22 @@ function Repair-LogKodierung {
     }
 }
 
+. "$PSScriptRoot\protokoll-kurz.ps1"
+. "$PSScriptRoot\bios-stand.ps1"
+
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $entry = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [$Level] $Message"
+    # Jede Zeile merkt sich der Lauf fuer die Uebersicht (protokoll-kurz.ps1),
+    # auch die, die nicht in die Datei kommen.
+    [void]$Global:LaufZeilen.Add([pscustomobject]@{ Level = $Level; Text = $Message; Quelle = $Global:LogQuelle })
     # UTF-8, nicht die Windows-Vorgabe. Add-Content schreibt in Windows
     # PowerShell 5.1 sonst ANSI, und dann steht im Protokoll ein einzelnes
     # Byte fuer "ü" - jeder Editor, der UTF-8 erwartet, zeigt dort ein
     # Ersatzzeichen (nachgemessen 21.09.2026 an der echten Datei).
-    try { Add-Content -Path $LogFile -Value $entry -Encoding UTF8 -ErrorAction SilentlyContinue } catch {}
+    if (-not (Test-ProtokollRauschen -Message $Message -Level $Level)) {
+        try { Add-Content -Path $LogFile -Value $entry -Encoding UTF8 -ErrorAction SilentlyContinue } catch {}
+    }
     # Jeder Fehler zaehlt fuer den Exit-Code des Laufs (Get-LaufExitCode).
     if ($Level -eq "ERROR") { $Global:FehlerImLauf = [int]$Global:FehlerImLauf + 1 }
     switch ($Level) {
@@ -883,6 +891,7 @@ function Get-UpdateConfig {
             Write-Log "$($T['config_local_error']): $($_.Exception.Message)" "ERROR"
         }
     }
+    try { $Global:ProtokollAusfuehrlich = [bool]$cfg.protokoll.ausfuehrlich } catch { }
     return $cfg
 }
 
@@ -1504,6 +1513,7 @@ function Test-WingetBenutzerPaket {
 }
 
 function Update-Winget {
+    Set-LogQuelle 'Winget'
     Show-SectionHeader $T['winget_title']
 
     if ($Global:Config -and -not $Global:Config.updateSources.winget.enabled) {
@@ -1617,6 +1627,7 @@ function Update-Winget {
 }
 
 function Update-Chocolatey {
+    Set-LogQuelle 'Chocolatey'
     Show-SectionHeader $T['choco_title']
 
     if ($Global:Config -and -not $Global:Config.updateSources.chocolatey.enabled) {
@@ -1741,6 +1752,7 @@ function Write-WindowsWeitereUpdates {
 }
 
 function Update-Windows {
+    Set-LogQuelle 'Windows'
     Show-SectionHeader $T['wu_title']
 
     if ($Global:Config -and -not $Global:Config.updateSources.windowsUpdate.enabled) {
@@ -1839,6 +1851,7 @@ function Update-Windows {
 }
 
 function Update-MicrosoftStore {
+    Set-LogQuelle 'Store'
     Show-SectionHeader $T['store_title']
 
     if ($Global:Config -and -not $Global:Config.updateSources.microsoftStore.enabled) {
@@ -1907,6 +1920,7 @@ function Update-MicrosoftStore {
 
 function Update-NVIDIA {
     param($Hardware)
+    Set-LogQuelle 'Treiber'
     if (-not $Hardware.HasNVIDIA) { return }
     if ($Global:Config -and -not $Global:Config.hardwareVendors.nvidia.enabled) { return }
 
@@ -1963,6 +1977,7 @@ function Update-NVIDIA {
 
 function Update-AMD {
     param($Hardware)
+    Set-LogQuelle 'Treiber'
     if (-not $Hardware.HasAMD) { return }
     if ($Global:Config -and $Global:Config.hardwareVendors.amd -and -not $Global:Config.hardwareVendors.amd.enabled) { return }
 
@@ -2001,6 +2016,7 @@ function Update-AMD {
 
 function Update-Intel {
     param($Hardware)
+    Set-LogQuelle 'Treiber'
     if (-not $Hardware.HasIntel) { return }
     if ($Global:Config -and -not $Global:Config.hardwareVendors.intel.enabled) { return }
 
@@ -2045,6 +2061,7 @@ function Update-Intel {
 
 function Update-MSI {
     param($Hardware)
+    Set-LogQuelle 'Treiber'
     if (-not $Hardware.HasMSI) { return }
     if ($Global:Config -and -not $Global:Config.hardwareVendors.msi.enabled) { return }
 
@@ -2160,6 +2177,7 @@ function Invoke-SilentUpdate {
     $errors    = @()
 
     # --- Winget ---
+    Set-LogQuelle 'Winget'
     if ($Global:Config -and -not $Global:Config.updateSources.winget.enabled) {
         Write-Log $T['silent_winget_off'] "WARNING"
     } elseif (-not (Test-WingetAvailable)) {
@@ -2386,6 +2404,7 @@ function Invoke-SilentUpdate {
     }
 
     # --- Chocolatey ---
+    Set-LogQuelle 'Chocolatey'
     if ($Global:Config -and -not $Global:Config.updateSources.chocolatey.enabled) {
         Write-Log $T['silent_choco_off'] "WARNING"
     } elseif (-not (Test-ChocoAvailable)) {
@@ -2424,7 +2443,11 @@ function Invoke-SilentUpdate {
         }
     }
 
+    # --- BIOS: nur messen und melden (bios-stand.ps1), nie einspielen ---
+    try { $null = Show-BiosStand } catch { Write-Log "BIOS: Messung fehlgeschlagen ($($_.Exception.Message))" "WARNING" }
+
     $duration = [math]::Round(((Get-Date) - $startTime).TotalMinutes, 1)
+    Write-LaufUebersicht -Minuten $duration
     Write-Log "========================================" "INFO"
     # [SILENT-DONE] NUR OHNE FEHLER (03.10.2026).
     #
@@ -2861,7 +2884,9 @@ function Main {
                 Update-AMD    -Hardware $hardware
                 Update-Intel  -Hardware $hardware
                 Update-MSI    -Hardware $hardware
+                try { $null = Show-BiosStand } catch { Write-Log "BIOS: Messung fehlgeschlagen ($($_.Exception.Message))" "WARNING" }
                 $duration = [math]::Round(((Get-Date) - $startTime).TotalMinutes, 1)
+                Write-LaufUebersicht -Minuten $duration
 
                 Write-Host "`n============================================" -ForegroundColor $ColorHeader
                 Write-Host $T['summary_title'] -ForegroundColor $ColorHeader
@@ -2969,6 +2994,7 @@ function Invoke-Auftrag {
                 Update-MSI    -Hardware $hardware
             }
             'pruefen' { Show-OffeneUpdates }
+            'bios'    { $null = Show-BiosStand }
             'alles'   {
                 Update-Winget
                 Update-Chocolatey
@@ -2978,9 +3004,11 @@ function Invoke-Auftrag {
                 Update-AMD    -Hardware $hardware
                 Update-Intel  -Hardware $hardware
                 Update-MSI    -Hardware $hardware
+                try { $null = Show-BiosStand } catch { Write-Log "BIOS: Messung fehlgeschlagen ($($_.Exception.Message))" "WARNING" }
             }
         }
     }
+    Write-LaufUebersicht
 }
 
 function Get-ProtokollNeuestZuerst {
@@ -3190,7 +3218,7 @@ try {
     }
 
     if ($Auftrag) {
-        $ERLAUBT = @('alles', 'winget', 'choco', 'windows', 'store', 'treiber', 'pruefen')
+        $ERLAUBT = @('alles', 'winget', 'choco', 'windows', 'store', 'treiber', 'pruefen', 'bios')
         $namen = Split-Auftrag $Auftrag
         $unbekannt = @($namen | Where-Object { $ERLAUBT -notcontains $_ })
         if ($unbekannt.Count -gt 0) {

@@ -15,6 +15,10 @@
     "authDatei": "%USERPROFILE%\\.ntfy-auth",
     "comment": "Meldung bei einem NAECHTLICHEN Lauf mit Fehlern, sonst nie. Eigene Werte gehoeren in update-config.local.json, nicht hierher: Diese Datei liegt im Repo. authDatei enthaelt eine Zeile benutzer:passwort."
   },
+  "protokoll": {
+    "ausfuehrlich": false,
+    "comment": "false = Routinezeilen (Konfiguration geladen, Internet OK, Hardware, Winget-Listen) stehen nur auf der Konsole, im Protokoll bleiben Aktualisiert/Warnung/Fehler und am Ende jedes Laufs eine Uebersicht. true = wie frueher alles. Eigene Werte gehoeren in update-config.local.json."
+  },
   "updateSources": {
     "winget": {
       "enabled": true,
