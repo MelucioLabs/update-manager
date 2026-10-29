@@ -1260,6 +1260,30 @@ $ergebnisse13 = & {
     Pruefe ((ConvertTo-BiosZahl '1.9') -lt (ConvertTo-BiosZahl '1.25')) 'Version 1.9 muss kleiner sein als 1.25 (Zahlen, nicht Text)'
     Pruefe ($null -eq (ConvertTo-BiosZahl 'F.1b')) 'unlesbare Version muss $null geben'
 
+    # Hardware-Stand: Schwelle aus der Konfiguration, nicht aus dem Code.
+    $hk = (Get-Content (Join-Path $Ordner 'update-config.json') -Raw | ConvertFrom-Json).hardwareStand
+    Pruefe ($null -ne $hk) 'update-config.json hat keinen Abschnitt hardwareStand'
+    $cpu13 = '13th Gen Intel(R) Core(TM) i7-13700F'
+    $t = Test-MicrocodeSchwelle -Cpu $cpu13 -Anbieter 'GenuineIntel' -Microcode 0x12B -Regeln $hk.microcode
+    Pruefe ($t -and $t.Unterschritten -and $t.Minimum -eq 0x12F) '0x12B muss bei i7-13700F unter 0x12F liegen'
+    $t = Test-MicrocodeSchwelle -Cpu $cpu13 -Anbieter 'GenuineIntel' -Microcode 0x12F -Regeln $hk.microcode
+    Pruefe ($t -and -not $t.Unterschritten) '0x12F darf nicht unterschreiten (Gleichstand ist in Ordnung)'
+    Pruefe ($null -eq (Test-MicrocodeSchwelle -Cpu 'Intel(R) Core(TM) Ultra 5 125U' -Anbieter 'GenuineIntel' -Microcode 0x28 -Regeln $hk.microcode)) 'Core Ultra darf keine 13./14.-Gen-Schwelle bekommen'
+    Pruefe ($null -eq (Test-MicrocodeSchwelle -Cpu '13th Gen Intel(R) Core(TM) i9-13980HX' -Anbieter 'GenuineIntel' -Microcode 0x10 -Regeln $hk.microcode)) 'Mobil-CPU (HX) darf keine Desktop-Schwelle bekommen'
+    Pruefe ($null -eq (Test-MicrocodeSchwelle -Cpu 'AMD Ryzen 7 7700' -Anbieter 'AuthenticAMD' -Microcode 0x12B -Regeln $hk.microcode)) 'AMD darf nie gegen Intel-Schwellen laufen'
+    Pruefe ((ConvertTo-MicrocodeZahl '0x12F') -eq 303) 'ConvertTo-MicrocodeZahl 0x12F'
+    Pruefe ((Get-BiosAlterMonate -Datum '2024-10-28' -Heute ([datetime]'2026-10-29')) -eq 24) 'BIOS-Alter 28.10.2024 bis 29.10.2026 sind 24 Monate'
+    Pruefe ((Get-BiosAlterMonate -Datum '2025-10-30' -Heute ([datetime]'2026-10-29')) -eq 11) 'BIOS-Alter: angebrochener Monat zaehlt nicht'
+    Pruefe ($null -eq (Get-BiosAlterMonate -Datum 'unlesbar')) 'unlesbares BIOS-Datum gibt $null'
+    $msi = [pscustomobject]@{ Hersteller = 'Micro-Star International Co., Ltd.'; Mainboard = 'Micro-Star International Co., Ltd. PRO H610M-G (MS-7D46)'; Produkt = 'PRO H610M-G (MS-7D46)'; BiosDatum = '2024-10-28' }
+    $hb = Get-HardwareBericht -Geraet $msi -Cpu ([pscustomobject]@{ Cpu = $cpu13; Anbieter = 'GenuineIntel'; Microcode = [uint32]0x12B }) -Konfig $hk -Heute ([datetime]'2026-10-29')
+    Pruefe ($hb.Warnungen.Count -eq 2) "MSI-Beispiel: erwartet 2 Warnungen (Microcode, BIOS-Alter), gefunden $($hb.Warnungen.Count)"
+    Pruefe ($hb.Link -eq 'https://www.msi.com/Motherboard/PRO-H610M-G/support') "MSI-Link: $($hb.Link)"
+    $hb = Get-HardwareBericht -Geraet $msi -Cpu ([pscustomobject]@{ Cpu = $cpu13; Anbieter = 'GenuineIntel'; Microcode = [uint32]0x12F }) -Konfig $hk -Heute ([datetime]'2025-03-01')
+    Pruefe ($hb.Warnungen.Count -eq 0) 'aktueller Microcode und junges BIOS duerfen keine Warnung geben'
+    $hb = Get-HardwareBericht -Geraet $msi -Cpu ([pscustomobject]@{ Cpu = $cpu13; Anbieter = 'GenuineIntel'; Microcode = [uint32]0x12B }) -Konfig $null
+    Pruefe ($hb.Warnungen.Count -eq 0 -and $hb.Zeile -match 'nichts bewertet') 'ohne Konfiguration darf nichts bewertet werden'
+
     # Rauschfilter: Routine raus, Warnungen und Fehler NIE.
     Pruefe (Test-ProtokollRauschen 'Internetverbindung OK' 'SUCCESS') 'Routinezeile wird nicht herausgefiltert'
     Pruefe (-not (Test-ProtokollRauschen 'Internetverbindung OK' 'ERROR')) 'ein Fehler darf nie gefiltert werden'

@@ -19,6 +19,26 @@
     "ausfuehrlich": false,
     "comment": "false = Routinezeilen (Konfiguration geladen, Internet OK, Hardware, Winget-Listen) stehen nur auf der Konsole, im Protokoll bleiben Aktualisiert/Warnung/Fehler und am Ende jedes Laufs eine Uebersicht. true = wie frueher alles. Eigene Werte gehoeren in update-config.local.json."
   },
+  "hardwareStand": {
+    "biosMaxAlterMonate": 12,
+    "microcode": [
+      {
+        "name": "Intel Core 13./14. Gen Desktop (Raptor Lake)",
+        "cpuMuster": "1[34]th Gen Intel\\(R\\) Core\\(TM\\) i[3579]-1[34]\\d{3}(K|KF|KS|F|T)?$",
+        "minimum": "0x12F"
+      }
+    ],
+    "supportLinks": [
+      { "hersteller": "Micro-Star|MSI", "url": "https://www.msi.com/Motherboard/{Produkt}/support", "allgemein": "https://www.msi.com/support" },
+      { "hersteller": "ASUSTeK|ASUS", "url": "https://www.asus.com/support/" },
+      { "hersteller": "Gigabyte", "url": "https://www.gigabyte.com/Support" },
+      { "hersteller": "ASRock", "url": "https://www.asrock.com/support/" },
+      { "hersteller": "LENOVO", "url": "https://support.lenovo.com/" },
+      { "hersteller": "Dell", "url": "https://www.dell.com/support/" },
+      { "hersteller": "HP|Hewlett", "url": "https://support.hp.com/" }
+    ],
+    "comment": "Nur LESEN, nie einspielen. microcode: Mindest-Revision je CPU-Familie (cpuMuster ist ein regulaerer Ausdruck gegen den CPU-Namen, nur Intel), darunter gibt es eine Warnung im Kurzprotokoll. Intel hebt die Schwelle mit neuen Microcode-Runden an: hier nachziehen, nicht im Code. 13./14. Gen Desktop: 0x12F gegen die Vmin-Instabilitaet, Mobil-CPUs (H, HX, U, P) sind nicht erfasst. biosMaxAlterMonate: aelteres BIOS ohne Hersteller-Katalog gibt eine Warnung. supportLinks: Hersteller-Support-Seite, die der Bericht nennt, wenn es keine Aktualitaetspruefung gibt (MSI liefert dem Skript HTTP 403, der Link ist nur zum Anklicken). Eigene Werte gehoeren in update-config.local.json."
+  },
   "updateSources": {
     "winget": {
       "enabled": true,

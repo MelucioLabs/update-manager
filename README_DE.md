@@ -313,8 +313,17 @@ Modell, BIOS-Version und -Datum und fragt bei Lenovo den öffentlichen Katalog
 (`download.lenovo.com/catalog/<Typ>_Win11.xml`) nach dem neuesten BIOS. Ein
 neueres BIOS erscheint als **Warnung**, nie als Fehler. **Eingespielt wird nie
 etwas**, auch nicht nachts: Das bleibt Handarbeit mit Netzteil. Andere
-Hersteller als Lenovo: Der Bericht nennt den Stand und sagt, dass er die
-Aktualität nicht prüfen kann. Code: `bios-stand.ps1`.
+Hersteller als Lenovo (auch MSI/Eigenbau): Der Bericht nennt den Stand und sagt,
+dass er die Aktualität nicht prüfen kann, plus den Link zur Support-Seite.
+Code: `bios-stand.ps1`.
+
+**Hardware-Stand auf jedem PC:** Dazu meldet der Manager CPU, Mainboard und den
+geladenen Intel-Microcode (nur lesend, ohne Administratorrechte) und schreibt
+eine **Warnung** ins Kurzprotokoll, wenn der Microcode unter der Schwelle liegt
+(Intel Core 13./14. Gen Desktop: `0x12F`) oder das BIOS älter als 12 Monate ist.
+Die Schwellen stehen in `update-config.json` unter `hardwareStand` (`microcode`,
+`biosMaxAlterMonate`, `supportLinks`); eigene Werte in `update-config.local.json`.
+AMD und Mobil-CPUs werden nicht bewertet. Das Einspielen bleibt Handarbeit.
 
 **Store und NVIDIA App:** Store-Updates stößt der Manager schon ohne Fenster an
 (MDM-Weg, braucht Administratorrechte). Für die NVIDIA App gibt es keinen
