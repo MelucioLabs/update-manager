@@ -24,7 +24,7 @@
     "microcode": [
       {
         "name": "Intel Core 13./14. Gen Desktop (Raptor Lake)",
-        "cpuMuster": "1[34]th Gen Intel\\(R\\) Core\\(TM\\) i[3579]-1[34]\\d{3}(K|KF|KS|F|T)?$",
+        "cpuMuster": "1[34]th Gen Intel\\(R\\) Core\\(TM\\) i[3579]-1[34]\\d{3}(K|KF|KS|F|T)?(\\s*@.*)?$",
         "minimum": "0x12F"
       }
     ],
@@ -50,8 +50,8 @@
     "chocolatey": {
       "enabled": true,
       "autoAccept": false,
-      "timeoutSeconds": 90,
-      "comment": "autoAccept: false = Benutzer wird vor jedem Update gefragt"
+      "timeoutSeconds": 1800,
+      "comment": "autoAccept: false = Benutzer wird vor jedem Update gefragt. timeoutSeconds gilt fuer 'upgrade all -y' INSGESAMT und stand auf 90: dieselbe Falle wie bei winget (dort 300), ein normaler Lauf ueber mehrere Pakete dauert nach eigener Messung regelmaessig laenger - abgeschnitten wurde mitten im Installieren. 1800 ist Notbremse gegen ein haengendes choco, kein Freibrief."
     },
     "windowsUpdate": {
       "enabled": true,

@@ -821,10 +821,16 @@ function Starte-Kette {
         # bekommt er ein Dateiende statt ewiger Stille.
         try { $prozess.StandardInput.Close() } catch { }
 
+        # stderr ASYNCHRON lesen: Waere es synchron und erst nach dem
+        # stdout-Block am Zug, blockt der Kindprozess an voller stderr-Pipe
+        # (~4 kB), statt weiter stdout zu schreiben - die Marke bleibt aus,
+        # die Oberflaeche wartet endlos (klassische Pipe-Sackgasse).
+        # So macht es Starte-Still in probe.ps1 seit je.
+        $fehlerFertig = $prozess.StandardError.ReadToEndAsync()
         while (-not $prozess.StandardOutput.EndOfStream) {
             $Warteschlange.Enqueue($prozess.StandardOutput.ReadLine())
         }
-        $fehler = $prozess.StandardError.ReadToEnd()
+        $fehler = $fehlerFertig.Result
         $prozess.WaitForExit()
         if ($fehler -and $fehler.Trim()) {
             $Warteschlange.Enqueue('[Fehler] ' + $fehler.Trim())
@@ -1462,7 +1468,14 @@ function Pruefe-Neue-Fassung {
             if ($f -and -not (Test-FassungNeuer $f.Tag $UpdaterVersion)) { $f = $null }
             $alt = Lies-SelbstUpdateZustand $SelbstUpdateZustand
             $aus = if ($alt -and $alt.PSObject.Properties['ausgeblendet']) { "$($alt.ausgeblendet)" } else { '' }
-            Schreibe-SelbstUpdateZustand $SelbstUpdateZustand $f $aus
+            # Eine aufgeraumte Netzantwort (kein Netz, Fehler) ist NICHT das
+            # Ergebnis "kein Update": Schriebe man sie weg, ginge die gemerkte
+            # Fassung verloren und geprueft staende auf "jetzt" - ein einzelner
+            # Fehlschlag versteckte einen verfuegbaren Hinweis fuer 24 Stunden.
+            # Ein Fehlschlag schreibt nur den Abfragestempel, die gemerkte
+            # Fassung bleibt stehen und zeigt sich beim naechsten Oeffnen.
+            $merker = if ($f) { $f } else { Lies-GemerkteFassung $alt }
+            Schreibe-SelbstUpdateZustand $SelbstUpdateZustand $merker $aus
             if ($f) { Zeige-NeueFassung $f $schalter }
         } catch { } finally { $ps.Dispose(); $rs.Dispose() }
     }.GetNewClosure())

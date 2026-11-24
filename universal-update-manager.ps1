@@ -2412,7 +2412,10 @@ function Invoke-SilentUpdate {
     } else {
         Write-Log $T['silent_choco_start'] "INFO"
         try {
-            $timeout = if ($Global:Config -and $Global:Config.updateSources.chocolatey.timeoutSeconds) { $Global:Config.updateSources.chocolatey.timeoutSeconds } else { 90 }
+            # Dieselbe Zeitgrenze wie in der Konfiguration vorgesehen (1800):
+            # 'upgrade all -y' laeuft ueber ALLE Pakete zusammen, 90 s rissen
+            # es oft mitten im Installieren ab (vgl. winget, dort 300 -> 1800).
+            $timeout = if ($Global:Config -and $Global:Config.updateSources.chocolatey.timeoutSeconds) { $Global:Config.updateSources.chocolatey.timeoutSeconds } else { 1800 }
 
             # Direkt via Start-Process ausfuehren (nicht Start-Job)
             $chocoResult = Invoke-ProcessWithTimeout -FilePath "choco.exe" `

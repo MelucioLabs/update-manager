@@ -262,7 +262,11 @@ function Lade-Setup {
     $Ordner = Join-Path $Ordner ([guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $Ordner | Out-Null
     # Nur SYSTEM und Administratoren (SIDs, damit die Windows-Sprache egal ist).
-    & icacls.exe $Ordner /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
+    # Scheitert das Setzen der Rechte still, behielte der Ordner vererbte,
+    # benutzerbeschreibbare Rechte - genau die Garantie Pruefsumme vor Start
+    # haette dahin. Deshalb pruefen, nicht verschweigen.
+    $rechtText = & icacls.exe $Ordner /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "Rechte am Download-Ordner nicht gesetzt: $rechtText" }
     $kopf = @{ 'User-Agent' = 'MelucioLabs-Update-Manager' }
     $summenText = (Invoke-WebRequest -Uri $Fassung.SummenUrl -Headers $kopf -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop).Content
     if ($summenText -is [byte[]]) { $summenText = [Text.Encoding]::ASCII.GetString($summenText) }
