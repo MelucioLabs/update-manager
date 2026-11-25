@@ -102,6 +102,7 @@ Name: "hintergrund"; Description: "{cm:TaskHintergrund}"; GroupDescription: "{cm
 ; Deinstallation an. Damit uebersteht die Datei jedes Update.
 Source: "..\universal-update-manager.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\update-manager-gui.ps1";       DestDir: "{app}"; Flags: ignoreversion
+Source: "..\gui-sprache.ps1";              DestDir: "{app}"; Flags: ignoreversion
 Source: "..\selbst-update.ps1";          DestDir: "{app}"; Flags: ignoreversion
 Source: "..\protokoll-ansicht.ps1";       DestDir: "{app}"; Flags: ignoreversion
 Source: "..\protokoll-kurz.ps1";          DestDir: "{app}"; Flags: ignoreversion
