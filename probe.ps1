@@ -1604,9 +1604,12 @@ if ($spuren.Count -eq 0) {
 if ($selbstText14 -match "\`$script:SU_SetupName\s*=\s*'update-manager-setup\.exe'") {
     Melde 'ok' "selbst-update.ps1: fester Setup-Name update-manager-setup.exe"
 } else { Schlecht "selbst-update.ps1 traegt nicht den festen Namen update-manager-setup.exe" }
-if ($issText14 -match 'OutputBaseFilename=update-manager-setup\.exe') {
-    Melde 'ok' "installer: Setup heisst update-manager-setup.exe (ohne Versionszusatz)"
-} else { Schlecht "installer: OutputBaseFilename traegt nicht den festen Namen" }
+if ($issText14 -match 'OutputBaseFilename=update-manager-setup\r?\n' -and
+    $issText14 -notmatch 'OutputBaseFilename=update-manager-setup\.exe') {
+    # Ohne Endung: Inno haengt .exe selbst an, eine Endung im Wert ergaebe
+    # update-manager-setup.exe.exe (Leak des Release-Baus v3.3.1, 25.11.2026).
+    Melde 'ok' "installer: OutputBaseFilename=update-manager-setup (Inno haengt .exe an)"
+} else { Schlecht "installer: OutputBaseFilename traegt nicht den festen Namen update-manager-setup (ohne .exe-Endung)" }
 $seite14 = Join-Path $Ordner '..\..\apps\meluciolabs\update.html'
 if (Test-Path $seite14) {
     $seiteText = Get-Content $seite14 -Raw
