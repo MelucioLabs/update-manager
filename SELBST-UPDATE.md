@@ -62,7 +62,7 @@ installiert sie auf einen Klick.
    kein Dialog, der sich vor die Arbeit schiebt, und die Zeile lässt sich
    für diese Fassung ausblenden („Später“).
 
-4. **Herunterladen**: das Asset `MelucioLabs-Update-Manager-Setup-<Version>.exe`
+4. **Herunterladen**: das Asset `update-manager-setup.exe`
    und `SHA256SUMS.txt` nach `%TEMP%\UpdateManager-Setup\`.
 
 5. **Prüfen**, bevor irgendetwas startet (siehe Sicherheit).

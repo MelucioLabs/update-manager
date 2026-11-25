@@ -7,14 +7,14 @@
   Foundation; die Schalter-Beschreibung steht im Monorepo unter
   docs/update-manager-signpath-antrag.md.
 
-  Aufbau: Der Workflow laedt dist/MelucioLabs-Update-Manager-Setup-<Version>.exe
+  Aufbau: Der Workflow laedt dist/update-manager-setup.exe
   als GitHub-Artefakt hoch (Standard: ZIP, daher <zip-file> als Wurzel).
   Signiert wird genau diese eine Datei, nichts anderes.
 
   Pflicht der Foundation: Produktname und Produktversion der Datei sind
   festgelegt und werden geprueft (product-name, product-version). Beides setzt
   installer/update-manager.iss; die Version kommt als Parameter "version" aus
-  dem Workflow; "productversion" ist die rein numerische Fassung (3.2.0.0), die der Installer in beide Produktversions-Felder schreibt, "version" die Fassung aus dem Git-Tag (nur fuer den Dateinamen).
+  dem Workflow; "productversion" ist die rein numerische Fassung (3.2.0.0), die der Installer in beide Produktversions-Felder schreibt, Die Version steckt im Release-Tag und in der Datei-Metadaten, nicht mehr im Dateinamen.
 -->
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
   <parameters>
@@ -22,7 +22,7 @@
     <parameter name="productversion" required="true" />
   </parameters>
   <zip-file>
-    <pe-file path="MelucioLabs-Update-Manager-Setup-${version}.exe"
+    <pe-file path="update-manager-setup.exe"
              product-name="MelucioLabs Update-Manager"
              product-version="${productversion}"
              company-name="MelucioLabs">

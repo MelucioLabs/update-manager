@@ -20,7 +20,7 @@ certificate by [SignPath Foundation](https://signpath.org/).
 *(This sentence applies from the first signed release on.)*
 
 **What is signed.** Only the Windows setup
-`MelucioLabs-Update-Manager-Setup-<version>.exe`, built from this repository
+`update-manager-setup.exe`, built from this repository
 by the GitHub Actions workflow [`release.yml`](.github/workflows/release.yml)
 on GitHub-hosted runners. Nothing else is signed, no third-party binaries.
 The PowerShell scripts in the setup are plain text and part of the repository.
@@ -87,7 +87,7 @@ Zertifikat der [SignPath Foundation](https://signpath.org/). *(Gilt ab dem
 ersten signierten Release.)*
 
 **Was signiert wird.** Nur das Windows-Setup
-`MelucioLabs-Update-Manager-Setup-<Version>.exe`, gebaut aus diesem Repository
+`update-manager-setup.exe`, gebaut aus diesem Repository
 vom GitHub-Actions-Workflow [`release.yml`](.github/workflows/release.yml) auf
 GitHub-gehosteten Runnern. Sonst nichts, keine fremden Programmdateien. Die
 PowerShell-Skripte im Setup sind Klartext und Teil des Repositorys.

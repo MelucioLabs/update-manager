@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- MelucioLabs Update-Manager, Akzentlila der Marke, kreisfoermiger Aktualisierungspfeil ohne Verlauf, damit er auf 16 px sauber bleibt -->
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="#7C6AF5"/>
+  <path d="M 186.27 106.79 A 62 62 0 1 1 138.77 66.94"
+        fill="none" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+  <polygon points="178.17,73.9 130.65,89.88 139.01,42.6" fill="#FFFFFF"/>
+</svg>

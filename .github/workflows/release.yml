@@ -111,7 +111,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: setup-unsigniert
-          path: dist/MelucioLabs-Update-Manager-Setup-*.exe
+          path: dist/update-manager-setup.exe
           if-no-files-found: error
 
       - name: Signieren ueber SignPath
@@ -134,7 +134,7 @@ jobs:
         if: github.ref_type == 'tag' && vars.SIGNPATH_AKTIV == 'true'
         shell: pwsh
         run: |
-          $signiert = @(Get-ChildItem signiert -Filter 'MelucioLabs-Update-Manager-Setup-*.exe' -Recurse)
+          $signiert = @(Get-ChildItem signiert -Filter 'update-manager-setup.exe' -Recurse)
           if ($signiert.Count -ne 1) { throw "Erwartet genau ein signiertes Setup, gefunden: $($signiert.Count)" }
           Copy-Item $signiert[0].FullName dist\ -Force
           $datei = Join-Path dist $signiert[0].Name
@@ -146,15 +146,12 @@ jobs:
           "Signiert von: $($s.SignerCertificate.Subject)"
       # ---------------------------------------------------------------------
 
-      # Feste Adresse fuer die Seite meluciolabs.de/update: GitHub liefert
-      # unter .../releases/latest/download/<Name> immer die Datei der neuesten
-      # Fassung, aber nur bei gleichbleibendem Namen. Das Setup mit Version im
-      # Namen bleibt fuer das Selbst-Update, dieses ist dieselbe Datei.
-      - name: Setup mit festem Namen
-        shell: pwsh
-        run: |
-          $setup = Get-ChildItem dist\MelucioLabs-Update-Manager-Setup-*.exe | Select-Object -First 1
-          Copy-Item $setup.FullName dist\MelucioLabs-Update-Manager-Setup.exe
+      # Feste Adresse fuer die Seite meluciolabs.de/update und fuer das
+      # Selbst-Update: GitHub liefert unter .../releases/latest/download/<Name>
+      # immer die Datei der neuesten Fassung, aber nur bei gleichbleibendem
+      # Namen. Der Bau heisst die Datei deshalb fest update-manager-setup.exe
+      # (installer/update-manager.iss, OutputBaseFilename); die Version steht
+      # im Release-Tag und in den Datei-Eigenschaften, nicht im Namen.
 
       - name: Pruefsumme
         shell: pwsh
@@ -175,7 +172,7 @@ jobs:
           $dateien = @(Get-ChildItem dist\*.exe | ForEach-Object FullName) + 'dist\SHA256SUMS.txt' + 'linux\update-manager.sh'
           # Kopf der Release-Notizen (GitHub haengt die Liste der Aenderungen an).
           $notizen = @(
-              'Setup fuer Windows 10 und 11: MelucioLabs-Update-Manager-Setup.exe (dieselbe Datei wie die mit Version im Namen).',
+              'Setup fuer Windows 10 und 11: update-manager-setup.exe.',
               'Die Pruefsumme steht in SHA256SUMS.txt; vergleichen mit: Get-FileHash <Datei> -Algorithm SHA256',
               'Das Setup ist noch nicht signiert, Windows SmartScreen zeigt deshalb eine Warnung. Anleitung: https://meluciolabs.de/update',
               'Linux: update-manager.sh. Lizenz: GPL-3.0-or-later.'

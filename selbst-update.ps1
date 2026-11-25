@@ -33,7 +33,7 @@
 $script:SU_ApiUrl           = 'https://api.github.com/repos/MelucioLabs/update-manager/releases/latest'
 $script:SU_DownloadPraefix  = 'https://github.com/MelucioLabs/update-manager/releases/download/'
 $script:SU_ReleasePraefix   = 'https://github.com/MelucioLabs/update-manager/releases/'
-$script:SU_SetupMuster      = 'MelucioLabs-Update-Manager-Setup-{0}.exe'
+$script:SU_SetupName        = 'update-manager-setup.exe'
 $script:SU_SummenName       = 'SHA256SUMS.txt'
 $script:SU_SignaturAussteller = ''
 $script:SU_MaxSetupBytes    = 200MB
@@ -89,7 +89,7 @@ function Test-FassungStimmig {
         if ($null -eq $v) { return $false }
         $tag = "$($Fassung.Tag)".Trim()
         $ohneV = if ($tag.StartsWith('v')) { $tag.Substring(1) } else { $tag }
-        $name = $script:SU_SetupMuster -f $ohneV
+        $name = $script:SU_SetupName
         if ("$($Fassung.SetupName)" -cne $name) { return $false }
         $basis = $script:SU_DownloadPraefix + $tag + '/'
         if ("$($Fassung.SetupUrl)" -cne ($basis + $name)) { return $false }
@@ -116,7 +116,7 @@ function Waehle-Fassung {
 
     $tag = "$($Release.tag_name)".Trim()
     $ohneV = if ($tag.StartsWith('v')) { $tag.Substring(1) } else { $tag }
-    $setupName = $script:SU_SetupMuster -f $ohneV
+    $setupName = $script:SU_SetupName
     $setup = @($Release.assets | Where-Object { $_.name -ceq $setupName }) | Select-Object -First 1
     $summen = @($Release.assets | Where-Object { $_.name -ceq $script:SU_SummenName }) | Select-Object -First 1
     if (-not $setup -or -not $summen) { return $null }

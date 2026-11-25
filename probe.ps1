@@ -1203,7 +1203,7 @@ if (-not (Test-Path $SelbstUpdate)) {
         Pruefe (-not (Test-FassungNeuer '' '3.2.0')) 'leeres Tag ist nicht neuer'
 
         # Adresspruefung: fester Anfang.
-        $gut = 'https://github.com/MelucioLabs/update-manager/releases/download/v3.3.0/MelucioLabs-Update-Manager-Setup-3.3.0.exe'
+        $gut = 'https://github.com/MelucioLabs/update-manager/releases/download/v3.3.0/update-manager-setup.exe'
         Pruefe (Test-SelbstUpdateAdresse $gut) 'die richtige Adresse wird abgelehnt'
         foreach ($schlecht in @(
             'http://github.com/MelucioLabs/update-manager/releases/download/v3.3.0/a.exe',
@@ -1217,8 +1217,8 @@ if (-not (Test-Path $SelbstUpdate)) {
 
         # Pruefsummenliste.
         $h = ('ab' * 32)
-        $liste = "$h  MelucioLabs-Update-Manager-Setup-3.3.0.exe`r`n" + ('cd' * 32) + "  update-manager.sh`r`n"
-        Pruefe ((Lies-Pruefsumme $liste 'MelucioLabs-Update-Manager-Setup-3.3.0.exe') -eq $h) 'Pruefsumme nicht gefunden'
+        $liste = "$h  update-manager-setup.exe`r`n" + ('cd' * 32) + "  update-manager.sh`r`n"
+        Pruefe ((Lies-Pruefsumme $liste 'update-manager-setup.exe') -eq $h) 'Pruefsumme nicht gefunden'
         Pruefe ($null -eq (Lies-Pruefsumme $liste 'andere.exe')) 'Pruefsumme fuer fremden Namen geliefert'
         Pruefe ($null -eq (Lies-Pruefsumme 'kaputt' 'x.exe')) 'kaputte Liste liefert eine Summe'
 
@@ -1234,7 +1234,7 @@ if (-not (Test-Path $SelbstUpdate)) {
             } | ConvertTo-Json -Depth 5
             $json | ConvertFrom-Json
         }
-        $n = 'MelucioLabs-Update-Manager-Setup-3.3.0.exe'
+        $n = 'update-manager-setup.exe'
         $a1 = Waehle-Fassung (Antwort 'v3.3.0' $false $false $gut $n)
         Pruefe ($a1 -and $a1.SetupName -eq $n -and $a1.Version -eq [version]'3.3.0') 'gueltige Antwort wird nicht erkannt'
         Pruefe ($null -eq (Waehle-Fassung (Antwort 'v3.3.0' $true $false $gut $n))) 'Entwurf wird angeboten'
@@ -1242,8 +1242,9 @@ if (-not (Test-Path $SelbstUpdate)) {
         Pruefe ($null -eq (Waehle-Fassung (Antwort 'v3.3.0' $false $false 'https://evil.example/a.exe' $n))) 'fremde Adresse wird angeboten'
         Pruefe ($null -eq (Waehle-Fassung (Antwort 'v3.3.0' $false $false $gut 'anderer-name.exe'))) 'Setup mit falschem Namen wird angeboten'
         Pruefe ($null -eq (Waehle-Fassung $null)) 'keine Antwort ergibt etwas'
-        # Downgrade-Mischung: hohes Tag, Dateien eines alten Releases.
-        $alt310 = 'https://github.com/MelucioLabs/update-manager/releases/download/v3.1.0/MelucioLabs-Update-Manager-Setup-3.1.0.exe'
+        # Downgrade-Mischung: hohes Tag, Dateien eines alten Releases. Der
+        # Dateiname ist jetzt fest, der Tag in der Adresse muss nonetheless passen.
+        $alt310 = 'https://github.com/MelucioLabs/update-manager/releases/download/v3.1.0/update-manager-setup.exe'
         Pruefe ($null -eq (Waehle-Fassung (Antwort 'v3.3.0' $false $false $alt310 $n))) 'Setup eines anderen Release-Tags wird angeboten'
         $kaputt = [pscustomobject]@{ fassung = 'nur ein Text' }
         Pruefe ($null -eq (Lies-GemerkteFassung $kaputt)) 'unvollstaendige gemerkte Fassung wirft oder wird geglaubt'
@@ -1487,6 +1488,66 @@ $ergebnisse13 = & {
 $liste13 = @($ergebnisse13 | ForEach-Object { $_ })
 if ($liste13.Count -eq 0) { Melde 'ok' "Kurzprotokoll und BIOS: Versionsvergleich, Rauschfilter (Warnung/Fehler nie), Uebersicht mit Neustart" }
 else { foreach ($l in $liste13) { Schlecht "Kurzprotokoll/BIOS: $l" } }
+
+# ── 14. Setup-Name und eigenes Symbol (Wunsch 40b) ──────────────────────────
+#
+# Die Setup-Datei heisst ueberall gleich: update-manager-setup.exe, ohne
+# Versionszusatz. Weicht EINE Stelle ab, findet das Selbst-Update oder die
+# Download-Seite die Datei nicht. Deshalb hier die ganze Kette gegenlesen.
+$selbstText14 = if (Test-Path $SelbstUpdate) { Get-Content $SelbstUpdate -Raw } else { '' }
+$issText14 = ''
+$issPfad14 = Join-Path $Ordner 'installer\update-manager.iss'
+if (Test-Path $issPfad14) { $issText14 = Get-Content $issPfad14 -Raw }
+
+# Keine Fundstelle des alten Namens mehr, Nirgends (auszer in dieser Zeile).
+$spuren = @(Get-ChildItem $Ordner -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -notmatch '\\assets\\|probe\.ps1$' } |
+    Where-Object { (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue) -match 'MelucioLabs-Update-Manager-Setup' })
+if ($spuren.Count -eq 0) {
+    Melde 'ok' "der alte Setup-Name MelucioLabs-Update-Manager-Setup steht nirgends mehr"
+} else { Schlecht "alter Setup-Name steht noch in: $(($spuren | ForEach-Object { $_.Name }) -join ', ')" }
+
+# Der feste Name steht in der Kette: Kern, Installer, Bau, Download-Seite.
+if ($selbstText14 -match "\`$script:SU_SetupName\s*=\s*'update-manager-setup\.exe'") {
+    Melde 'ok' "selbst-update.ps1: fester Setup-Name update-manager-setup.exe"
+} else { Schlecht "selbst-update.ps1 traegt nicht den festen Namen update-manager-setup.exe" }
+if ($issText14 -match 'OutputBaseFilename=update-manager-setup\.exe') {
+    Melde 'ok' "installer: Setup heisst update-manager-setup.exe (ohne Versionszusatz)"
+} else { Schlecht "installer: OutputBaseFilename traegt nicht den festen Namen" }
+$seite14 = Join-Path $Ordner '..\..\apps\meluciolabs\update.html'
+if (Test-Path $seite14) {
+    $seiteText = Get-Content $seite14 -Raw
+    if ($seiteText -match 'releases/latest/download/update-manager-setup\.exe' -and
+        $seiteText -match 'Get-FileHash \.\\update-manager-setup\.exe') {
+        Melde 'ok' "Download-Seite: Knopf und Pruefsummen-Befehl nennen update-manager-setup.exe"
+    } else { Schlecht "Download-Seite: Download-Adresse oder Pruefsummen-Befehl nennt den falschen Namen" }
+} else {
+    Melde 'ok' "Download-Seite nicht im selben Baum (oeffentliches Repo): dort von Hand abgleichen"
+}
+
+# Fenster-Icon gesetzt: das Fenster nimmt die .ico aus dem Installationsordner,
+# das Setup kopiert sie mit, die Datei liegt im Repo.
+$guiText14 = Get-Content $Gui -Raw
+if ($guiText14 -match '\$fenster\.Icon\s*=\s*\[System\.Windows\.Media\.Imaging\.BitmapFrame\]::Create' -and
+    $guiText14 -match "logo\.ico") {
+    Melde 'ok' "Fenster-Icon gesetzt: das Fenster laedt logo.ico aus dem Installationsordner"
+} else { Schlecht "Fenster-Icon gesetzt: das Fenster setzt kein eigenes Icon" }
+if ($guiText14 -match 'if \(Test-Path -LiteralPath \$iconDatei\)') {
+    Melde 'ok' "Fenster-Icon mit Waechter: fehlt die Datei, bleibt das Ersatzsymbol, nichts wirft"
+} else { Schlecht "Fenster-Icon ungeschuetzt: ein fehlendes Icon darf das Fenster nicht verhindern" }
+if ($issText14 -match 'SetupIconFile=' -and $issText14 -match 'DestName: "logo\.ico"') {
+    Melde 'ok' "installer: SetupIconFile gesetzt, icon.ico wandert als logo.ico in den Installationsordner"
+} else { Schlecht "installer: Setup-Icon oder die mitkopierte logo.ico fehlen" }
+$svgPfad14 = Join-Path $Ordner 'assets\logo.svg'
+$icoPfad14 = Join-Path $Ordner 'assets\icon.ico'
+if ((Test-Path $svgPfad14) -and (Test-Path $icoPfad14)) {
+    # Das ico als Datei lesen: die Kopfbytes *00 00 01 00* kennzeichnen .ico,
+    # die Groessenliste folgt im Verzeichnis-Eintrag.
+    $icoKopf = [System.IO.File]::ReadAllBytes($icoPfad14) | Select-Object -First 4
+    if ($icoKopf[0] -eq 0 -and $icoKopf[1] -eq 0 -and $icoKopf[2] -eq 1 -and $icoKopf[3] -eq 0) {
+        Melde 'ok' "eigenes Symbol liegt vor: assets\logo.svg als Quelle, assets\icon.ico mit allen Groessen"
+    } else { Schlecht "assets\icon.ico ist keine ICO-Datei (Kopfbyte falsch)" }
+} else { Schlecht "eigenes Symbol fehlt: assets\logo.svg oder assets\icon.ico nicht gefunden" }
 
 # ── 10. Konfiguration ───────────────────────────────────────────────────────
 if (-not (Test-Path $Konfig)) {

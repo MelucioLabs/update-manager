@@ -49,7 +49,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 LicenseFile=..\LICENSE
 OutputDir=..\dist
-OutputBaseFilename=MelucioLabs-Update-Manager-Setup-{#AppVersion}
+OutputBaseFilename=update-manager-setup.exe
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -57,6 +57,11 @@ WizardStyle=modern
 ShowLanguageDialog=auto
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={#PsExe}
+; Eigenes Symbol: das Setup traegt das Marken-Icon, die Verknuepfungen
+; und die installierte Oberflaeche ebenfalls (assets\icon.ico, als logo.ico
+; neben das Skript kopiert; das Fenster such es dort, im Repo-Fall unter assets).
+SetupIconFile=..\assets\icon.ico
+UninstallDisplayIcon={app}\logo.ico
 SetupLogging=yes
 ; Versionsinfo der Setup-Datei. Die SignPath Foundation verlangt, dass Produktname
 ; und Produktversion in jeder signierten Datei gesetzt sind und gleich bleiben
@@ -105,6 +110,7 @@ Source: "..\bios-stand.ps1";              DestDir: "{app}"; Flags: ignoreversion
 Source: "..\universal-update-manager.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\update-manager-gui.bat";       DestDir: "{app}"; Flags: ignoreversion
 Source: "..\update-config.json";           DestDir: "{app}"; Flags: ignoreversion
+Source: "..\assets\icon.ico";              DestDir: "{app}"; DestName: "logo.ico"; Flags: ignoreversion
 Source: "..\probe.ps1";                    DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE";                      DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md";                    DestDir: "{app}"; Flags: ignoreversion
@@ -117,10 +123,10 @@ Source: "..\CODE-SIGNING-POLICY.md";      DestDir: "{app}"; Flags: ignoreversion
 ; (sie meldet nur, dass sie fehlen). Die .bat holt die Erhoehung per UAC und
 ; startet dann powershell -WindowStyle Hidden. runminimized haelt das kurze
 ; Konsolenfenster vor der UAC-Abfrage klein.
-Name: "{group}\{#AppName}"; Filename: "{app}\update-manager-gui.bat"; WorkingDir: "{app}"; IconFilename: "{#PsExe}"; Comment: "{cm:GuiKommentar}"; Flags: runminimized
-Name: "{group}\{cm:KonsoleName}"; Filename: "{app}\universal-update-manager.bat"; WorkingDir: "{app}"; IconFilename: "{#PsExe}"
+Name: "{group}\{#AppName}"; Filename: "{app}\update-manager-gui.bat"; WorkingDir: "{app}"; IconFilename: "{app}\logo.ico"; Comment: "{cm:GuiKommentar}"; Flags: runminimized
+Name: "{group}\{cm:KonsoleName}"; Filename: "{app}\universal-update-manager.bat"; WorkingDir: "{app}"; IconFilename: "{app}\logo.ico"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\update-manager-gui.bat"; WorkingDir: "{app}"; IconFilename: "{#PsExe}"; Comment: "{cm:GuiKommentar}"; Flags: runminimized; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\update-manager-gui.bat"; WorkingDir: "{app}"; IconFilename: "{app}\logo.ico"; Comment: "{cm:GuiKommentar}"; Flags: runminimized; Tasks: desktopicon
 
 [Run]
 ; Hintergrund-Pruefung ueber den vorhandenen Parameter -AufgabeZeit HH:MM

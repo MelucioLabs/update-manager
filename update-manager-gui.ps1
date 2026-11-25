@@ -725,6 +725,20 @@ if ($xamlText -match '__[A-Z]+__') {
 
 $fenster = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml))
 
+# Eigenes Symbol: das Setup legt assets\icon.ico als logo.ico neben dieses
+# Skript; im Repo-Fall (ohne Setup) liegt die .ico unter assets\icon.ico.
+# Fehlt beides, bleibt das Ersatzsymbol von Windows. Nie werfen: Das Icon
+# ist Kosmetik, ein kaputter Pfad darf das Fenster nicht verhindern.
+$iconDatei = Join-Path $SkriptOrdner 'logo.ico'
+if (-not (Test-Path -LiteralPath $iconDatei)) {
+    $iconDatei = Join-Path $SkriptOrdner 'assets\icon.ico'
+}
+if (Test-Path -LiteralPath $iconDatei) {
+    try {
+        $fenster.Icon = [System.Windows.Media.Imaging.BitmapFrame]::Create((New-Object System.Uri($iconDatei)))
+    } catch { }
+}
+
 $E = @{}
 foreach ($name in @('TxtHardware','TxtLetzterLauf','LinkMelucio','ChkWinget','ChkChoco','ChkWindows','ChkStore','ChkTreiber',
                     'TxtProtokoll','ScrollProtokoll','LiveRahmen','TxtLive','Fortschritt','TxtStatus','TxtZeit','BtnZeit','TxtAufgabe',
