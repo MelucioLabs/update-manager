@@ -401,6 +401,10 @@ $xamlText = @'
               <Trigger Property="IsKeyboardFocused" Value="True">
                 <Setter TargetName="Flaeche" Property="BorderBrush" Value="{StaticResource AkzentText}"/>
               </Trigger>
+              <!-- Click lock (Chip 49): a locked tile shows the state. -->
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.65"/>
+              </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
@@ -410,9 +414,20 @@ $xamlText = @'
 
   <Grid Margin="22">
     <Grid.RowDefinitions>
-      <RowDefinition Height="Auto"/>
-      <RowDefinition Height="Auto"/>
       <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+  <!-- Responsive Fassung (Chip 49, David, 25.11.2026): Der INHALT der
+       Seiten 0 bis 4 laeuft in einem ScrollViewer, die Knopfreihe haengt
+       AUSSERHALB davon und bleibt dadurch auch auf kleinen Screens (Laptop,
+       Querformat) immer sichtbar. Die Fensterhoehe wird beim Aufbau an das
+       Arbeitsfeld geklemmt (SystemParameters.WorkArea, siehe unten) - je
+       nach Aufloesung, nicht einfach groesser. -->
+  <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,2,0">
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
       <RowDefinition Height="Auto"/>
       <RowDefinition Height="Auto"/>
       <RowDefinition Height="Auto"/>
@@ -497,7 +512,10 @@ $xamlText = @'
               AutomationProperties.Name="__T_einstellungen_umschalten__">
         <StackPanel>
           <TextBlock Style="{StaticResource Symbol}" Text="&#xE713;"/>
-          <TextBlock x:Name="TxtKachelEinst" Text="5" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" Foreground="{StaticResource Schrift}"/>
+          <!-- Captions instead of running statistics (Chip 49, David,
+               25.11.2026): the tile says WHAT it is, not how many; the
+               places to read numbers live behind the tiles. -->
+          <TextBlock Text="__T_einstellungen_titel__" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource Schrift}"/>
           <TextBlock Text="__T_quellen_aktiv__" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
         </StackPanel>
       </Button>
@@ -505,16 +523,16 @@ $xamlText = @'
               AutomationProperties.Name="__T_verlauf_umschalten__">
         <StackPanel>
           <TextBlock Style="{StaticResource Symbol}" Text="&#xE81C;"/>
-          <TextBlock Text="__T_verlauf__" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" Foreground="{StaticResource Schrift}"/>
-          <TextBlock x:Name="TxtKachelVerlauf" Text="__T_dieser_sitzung__" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
+          <TextBlock Text="__T_verlauf__" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource Schrift}"/>
+          <TextBlock Text="__T_dieser_sitzung__" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
         </StackPanel>
       </Button>
       <Button x:Name="KachelProtokolle" Grid.Column="3" Style="{StaticResource Kachel}"
               AutomationProperties.Name="__T_protokoll_umschalten__">
         <StackPanel>
           <TextBlock Style="{StaticResource Symbol}" Text="&#xE8A5;"/>
-          <TextBlock x:Name="TxtKachelProto" Text="__T_protokoll__" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" Foreground="{StaticResource Schrift}"/>
-          <TextBlock x:Name="TxtKachelProtoZeit" Text="__T_im_protokoll__" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
+          <TextBlock Text="__T_protokoll__" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource Schrift}"/>
+          <TextBlock Text="__T_protokoll_zeitraum__" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
         </StackPanel>
       </Button>
     </Grid>
@@ -603,59 +621,49 @@ $xamlText = @'
     </StackPanel>
     </StackPanel>
 
-    <!-- Details starten geschlossen (Hausregel: Aufklappbares ist zu). Hier
-         liegen der Verlauf dieser Sitzung und das Protokoll, schoen gesetzt. -->
-    <Grid x:Name="PanelDetails" Grid.Row="2" Visibility="Collapsed">
-      <Grid>
-        <Grid.RowDefinitions>
-          <RowDefinition Height="Auto"/>
-          <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-        <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-          <Button x:Name="BtnAnsichtVerlauf" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE81C;"/>
-            <TextBlock x:Name="TxtBtnAnsichtVerlauf" Text="__T_verlauf__" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-          </StackPanel>
-        </Button>
-          <Button x:Name="BtnAnsichtProtokoll" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE8A5;"/>
-            <TextBlock x:Name="TxtBtnAnsichtProtokoll" Text="__T_protokoll__" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-          </StackPanel>
-        </Button>
-          <Button x:Name="BtnFilterAlles" Style="{StaticResource KnopfLeise}" Margin="16,0,8,0" Visibility="Collapsed">
+    <!-- EINE Ansicht fuer Verlauf plus Protokoll (Chip 49, David,
+         25.11.2026): die Verlaufs-Kachel und der Verlaufsknopf hier doppeln
+         sich, der Umschalter ist weg. Details starten geschlossen (Hausregel:
+         Aufklappbares ist zu); das Feld oben traegt den Verlauf dieser
+         Sitzung, darunter das Protokoll mit seinen Filtern. -->
+    <StackPanel x:Name="PanelDetails" Grid.Row="2" Visibility="Collapsed">
+      <WrapPanel Orientation="Horizontal" Margin="0,0,0,8">
+        <Button x:Name="BtnFilterAlles" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0" Visibility="Collapsed">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE8FD;"/>
             <TextBlock x:Name="TxtBtnFilterAlles" Text="__T_filter_alles__" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
           </StackPanel>
         </Button>
-          <Button x:Name="BtnFilterFehler" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0" Visibility="Collapsed">
+        <Button x:Name="BtnFilterFehler" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0" Visibility="Collapsed">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE783;"/>
             <TextBlock x:Name="TxtBtnFilterFehler" Text="__T_filter_fehler_format__" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
           </StackPanel>
         </Button>
-        </WrapPanel>
-        <Border x:Name="PanelVerlauf" Grid.Row="1" Background="{StaticResource Tief}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
-                CornerRadius="12" Padding="4" MinHeight="120">
-          <ScrollViewer x:Name="ScrollProtokoll" VerticalScrollBarVisibility="Auto">
-            <TextBox x:Name="TxtProtokoll" Background="Transparent" Foreground="__PROTOKOLL__"
-                     BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12"
-                     IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" Padding="12,8"
-                     Text="__T_protokoll_bereit__"/>
-          </ScrollViewer>
-        </Border>
-        <Border x:Name="PanelProtokoll" Grid.Row="1" Background="{StaticResource Tief}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
-                CornerRadius="12" Padding="4"
-                MinHeight="120" Visibility="Collapsed">
-          <RichTextBox x:Name="RtfProtokoll" Background="Transparent" Foreground="__PROTOKOLL__"
-                       BorderThickness="0" IsReadOnly="True" FontFamily="Segoe UI" FontSize="13"
-                       VerticalScrollBarVisibility="Auto" Padding="8,4"
-                       AutomationProperties.Name="__T_protokoll__"/>
-        </Border>
-      </Grid>
-    </Grid>
+      </WrapPanel>
+      <TextBlock Margin="2,0,0,4" FontSize="12" Foreground="{StaticResource SchriftLei}">
+        <Run Text="__T_verlauf__"/><Run Text=" (__T_dieser_sitzung__)"/>
+      </TextBlock>
+      <Border x:Name="PanelVerlauf" Background="{StaticResource Tief}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
+              CornerRadius="12" Padding="4" Height="180">
+        <ScrollViewer x:Name="ScrollProtokoll" VerticalScrollBarVisibility="Auto">
+          <TextBox x:Name="TxtProtokoll" Background="Transparent" Foreground="__PROTOKOLL__"
+                   BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12"
+                   IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" Padding="12,8"
+                   Text="__T_protokoll_bereit__"/>
+        </ScrollViewer>
+      </Border>
+      <TextBlock Margin="2,12,0,4" FontSize="12" Foreground="{StaticResource SchriftLei}">
+        <Run Text="__T_protokoll__"/><Run Text=" (__T_protokoll_zeitraum__)"/>
+      </TextBlock>
+      <Border x:Name="PanelProtokoll" Background="{StaticResource Tief}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
+              CornerRadius="12" Padding="4" Height="336">
+        <RichTextBox x:Name="RtfProtokoll" Background="Transparent" Foreground="__PROTOKOLL__"
+                     BorderThickness="0" IsReadOnly="True" FontFamily="Segoe UI" FontSize="13"
+                     VerticalScrollBarVisibility="Auto" Padding="8,4"
+                     AutomationProperties.Name="__T_protokoll__"/>
+      </Border>
+    </StackPanel>
 
     <ProgressBar x:Name="Fortschritt" Grid.Row="3" Height="5" Margin="0,14,0,0"
                  IsIndeterminate="False" Background="{StaticResource Karte}"
@@ -673,7 +681,10 @@ $xamlText = @'
                  AutomationProperties.Name="__T_live_ausgabe__"/>
     </Border>
 
-    <Grid Grid.Row="5" Margin="0,16,0,0">
+  </Grid>
+  </ScrollViewer>
+
+  <Grid Grid.Row="1" Margin="0,16,0,0">
       <TextBlock x:Name="TxtStatus" Text="" VerticalAlignment="Center"
                  Foreground="{StaticResource SchriftLei}" FontSize="12" TextWrapping="Wrap"/>
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -794,6 +805,23 @@ if ($xamlText -match '__[A-Z]+__') {
 
 $fenster = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml))
 
+# Responsive height (Chip 49, David, 25.11.2026): the window fits the WORK
+# AREA, not a fixed value. On small laptops (landscape, 720p and below) the
+# fixed 800 px pushed the button row below the screen edge. The clamp is
+# relative to the actual work area (SystemParameters.WorkArea) - smaller
+# window on a smaller screen, never larger than before. The content runs in
+# a ScrollViewer with the button row OUTSIDE of it, so with less height the
+# middle scrolls and the buttons stay visible.
+$arbeitsfeld = [System.Windows.SystemParameters]::WorkArea
+# Reserve for title bar and window frame; never below 480, the button row
+# plus one result card must still fit.
+$nutzHoehe = [Math]::Max(480.0, $arbeitsfeld.Height - 40)
+if ([double]$fenster.Height -gt $nutzHoehe) { $fenster.Height = $nutzHoehe }
+$fenster.MaxHeight = $nutzHoehe
+$fenster.MinHeight = [Math]::Min(640.0, $nutzHoehe)
+$nutzBreite = [double]$arbeitsfeld.Width
+if ([double]$fenster.Width -gt $nutzBreite) { $fenster.Width = $nutzBreite }
+
 # Eigenes Symbol: das Setup legt assets\icon.ico als logo.ico neben dieses
 # Skript; im Repo-Fall (ohne Setup) liegt die .ico unter assets\icon.ico.
 # Fehlt beides, bleibt das Ersatzsymbol von Windows. Nie werfen: Das Icon
@@ -815,9 +843,8 @@ foreach ($name in @('TxtHardware','TxtLetzterLauf','LinkMelucio','ChkWinget','Ch
                     'ZeileNeueFassung','TxtNeueFassung','LinkNeueFassung','TxtLinkSeite','LinkUpdateSeite',
                     'BtnNeueFassung','BtnFassungSpaeter',
                     'PanelEinstellungen','KarteErgebnis','StreifenErgebnis','TxtZahl','TxtErgebnis','TxtErgebnisZeit','PanelDetails',
-                    'TxtIconErgebnis','KachelEinstellungen','KachelVerlauf','KachelProtokolle','TxtKachelEinst','TxtKachelVerlauf',
-                    'TxtKachelProto','TxtKachelProtoZeit','TxtBtnFilterFehler',
-                    'BtnAnsichtVerlauf','BtnAnsichtProtokoll','BtnFilterAlles','BtnFilterFehler',
+                    'TxtIconErgebnis','KachelEinstellungen','KachelVerlauf','KachelProtokolle','TxtBtnFilterFehler',
+                    'BtnFilterAlles','BtnFilterFehler',
                     'PanelVerlauf', 'PanelProtokoll', 'RtfProtokoll',
                     'ChkSelbstPruefen', 'BtnSpracheDe', 'BtnSpracheEn', 'TxtSelbstUpdate', 'TxtBtnStart')) {
     $E[$name] = $fenster.FindName($name)
@@ -866,6 +893,12 @@ function Schreibe {
 
 function Setze-Beschaeftigt {
     param([bool]$Ja, [string]$Text = '', [switch]$Gut, [switch]$Schlecht)
+    # Click lock (Chip 49, David, 25.11.2026): during a run EVERY control
+    # goes dark, not only the two run buttons. nutzi measured that the
+    # protocol button, the tiles and Uebernehmen stayed clickable, and
+    # Uebernehmen could start a SECOND core call behind the running one.
+    # One list, two directions: it locks at $Ja = $true and lifts the lock
+    # when the run ends ($Ja = $false) - same state, same list.
     $E.Fortschritt.IsIndeterminate = $Ja
     if ($Ja) {
         $Live.Clear(); $E.TxtLive.Text = ''
@@ -880,8 +913,12 @@ function Setze-Beschaeftigt {
     $E.TxtStatus.Foreground = if ($Schlecht) { $fenster.FindResource('Schlecht') }
                               elseif ($Gut)  { $fenster.FindResource('Gut') }
                               else           { $fenster.FindResource('SchriftLei') }
-    foreach ($n in @('BtnStart','BtnPruefen','ChkWinget','ChkChoco','ChkWindows','ChkStore','ChkTreiber',
-                     'ChkSelbstPruefen','BtnSpracheDe','BtnSpracheEn')) {
+    foreach ($n in @('BtnStart','BtnPruefen','BtnProtokoll','BtnSchliessen','BtnZeit',
+                     'BtnFilterAlles','BtnFilterFehler','TxtZeit',
+                     'KachelEinstellungen','KachelVerlauf','KachelProtokolle',
+                     'ChkWinget','ChkChoco','ChkWindows','ChkStore','ChkTreiber',
+                     'ChkSelbstPruefen','BtnSpracheDe','BtnSpracheEn',
+                     'BtnNeueFassung','BtnFassungSpaeter')) {
         $E[$n].IsEnabled = -not $Ja
     }
 }
@@ -968,6 +1005,14 @@ function Starte-Kette {
 
     $Lauf.begonnen = Get-Date
     $Lauf.art = $Art
+
+    # Restlos leeren (Leiti, Pruefrunde 2): Eine ALTE FERTIG-Marke aus dem
+    # vorherigen Lauf darf den ersten Takt des neuen Laufs nicht erreichen -
+    # sie hob die Klicksperre, waehrend der neue Kern laeuft, und meldete
+    # das alte Ende als neues. Genau der Doppellauf, den die Klicksperre
+    # (Punkt B) verhindern soll.
+    $rest = $null
+    while ($Warteschlange.TryDequeue([ref]$rest)) { }
 
     # Hier und nicht im Hintergrund zusammengebaut: Der Runspace unten kennt
     # die Funktionen dieses Skripts nicht, nur die Variablen, die er bekommt.
@@ -1152,9 +1197,22 @@ $Takt.Add_Tick({
         Schreibe $zeile
     }
   } catch {
-    # Ein Fehler beim Anzeigen darf den Lauf nicht mitreissen.
-    $Takt.Stop()
-    try { $E.TxtStatus.Text = ($T['status_anzeige_gestoert_format'] -f $_.Exception.Message) } catch { }
+    # Wir sind schon beim Anzeigen kaputt: Der ERSTE Aufruf im Catch ist die
+    # Freigabe (Setze-Beschaeftigt $false), BEVOR etwas anderes passieren
+    # kann - ein zweiter Fehler beim Schreiben darf das Freigeben nicht
+    # verhindern (Leiti, Pruefrunde 2). Beide Schreibe-Aufrufe tragen deshalb
+    # je ein eigenes try/catch. Raeumen und Protokollzeile danach.
+    try {
+        $Takt.Stop()
+        Setze-Beschaeftigt $false $T['status_fehlgeschlagen']
+        Raeume-Lauf-Auf
+        # Restlos leeren: Keine alte Marke darf einen spaeteren Lauf stoeren.
+        $rest = $null
+        while ($Warteschlange.TryDequeue([ref]$rest)) { }
+        try { Schreibe '' } catch { }
+        try { Schreibe ($T['status_anzeige_gestoert_format'] -f $_.Exception.Message) } catch { }
+        try { Write-EigenesLog $_ } catch { }
+    } catch { }
   }
 })
 
@@ -1190,6 +1248,22 @@ function Write-EigenesLog {
     if (-not (Test-Path $ordner)) { New-Item -ItemType Directory -Force -Path $ordner | Out-Null }
     $zeile = '[{0}] [GUI] [ERROR] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Fehler.Exception.Message
     Add-Content -Path $LogPfad -Value $zeile -Encoding UTF8
+}
+
+function Starte-FensterNeu {
+    <#
+        Neustart aus dem laufenden Fenster (Sprachwechsel, Selbst-Update).
+        Chip 49, David, 25.11.2026: Direkt gegen das versteckte
+        powershell-Fenster (gleiches Exe, -WindowStyle Hidden -File) statt
+        ueber die .bat - deren Konsole blieb bis zum Aufbau des neuen WPF-
+        Fensters sichtbar. -WorkingDirectory haelt das Arbeitsverzeichnis;
+        die Rueckgabekette bleibt, weil derselbe Exit-Wege gilt wie beim
+        Start ueber die .bat (Exit-Codes der GUI, Fehler im Fenster und im
+        Protokoll).
+    #>
+    Start-Process -FilePath $ExePfad -WorkingDirectory $SkriptOrdner -ArgumentList @(
+        '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden',
+        '-File', ("`"{0}`"" -f $PSCommandPath))
 }
 
 $E.BtnStart.Add_Click({
@@ -1238,33 +1312,30 @@ $E.BtnZeit.Add_Click({
 })
 
 $E.BtnProtokoll.Add_Click({
+    # One combined view (Chip 49): the button toggles it like the tiles do.
     if (-not (Test-Path $LogPfad)) { $E.TxtStatus.Text = $T['kein_protokoll']; return }
-    if ($AnsichtGeladen) {
-        # In der App, schoen gesetzt (Davids Wunsch 08.10.2026).
-        Zeige-Details $true 'protokoll'
-    } else {
-        # Ohne das Ansicht-Modul wie frueher: Kopie im Editor.
+    if (-not $AnsichtGeladen) {
+        # Without the view module as before: a copy in the editor.
         Start-Process -FilePath $ExePfad -WindowStyle Hidden -ArgumentList @(
             '-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$Kern`"",'-ProtokollAnzeigen')
+        return
     }
+    if (Details-Offen) { Zeige-Details $false } else { Zeige-Details $true }
 })
-$E.BtnAnsichtVerlauf.Add_Click({ Setze-Ansicht 'verlauf'; Aktualisiere-Kacheln })
-$E.BtnAnsichtProtokoll.Add_Click({ Setze-Ansicht 'protokoll'; Aktualisiere-Kacheln })
 $E.BtnFilterAlles.Add_Click({ $script:FilterFehler = $false; Zeige-ProtokollAnsicht })
 $E.BtnFilterFehler.Add_Click({ $script:FilterFehler = $true; Zeige-ProtokollAnsicht })
-# Die vier kleinen Karten oben: Einstellungen, Verlauf und Protokoll schalten ihr
-# Feld, die erste zeigt nur das Ergebnis.
+# Die vier kleinen Karten oben: Einstellungen schaltet ihre Karte, Verlauf
+# und Protokoll oeffnen dieselbe Zusammenleg-Ansicht (eine Ansicht fuer
+# beides, Chip 49).
 $E.KachelEinstellungen.Add_Click({
     $E.PanelEinstellungen.Visibility = if ($E.PanelEinstellungen.Visibility -eq 'Visible') { 'Collapsed' } else { 'Visible' }
     Aktualisiere-Kacheln
 })
-$E.KachelVerlauf.Add_Click({
-    if ((Details-Offen) -and $script:AnsichtModus -eq 'verlauf') { Zeige-Details $false } else { Zeige-Details $true 'verlauf' }
-})
-$E.KachelProtokolle.Add_Click({
-    if (-not (Test-Path $LogPfad)) { $E.TxtStatus.Text = $T['kein_protokoll']; return }
-    if ((Details-Offen) -and $script:AnsichtModus -eq 'protokoll') { Zeige-Details $false } else { Zeige-Details $true 'protokoll' }
-})
+foreach ($k in @('KachelVerlauf', 'KachelProtokolle')) {
+    $E[$k].Add_Click({
+        if (Details-Offen) { Zeige-Details $false } else { Zeige-Details $true }
+    })
+}
 foreach ($c in @($E.ChkWinget, $E.ChkChoco, $E.ChkWindows, $E.ChkStore, $E.ChkTreiber)) { $c.Add_Click({ Aktualisiere-Kacheln; Speichere-GuiEinstellungen }) }
 
 # Davids Regler (25.11.2026): selbstUpdate.pruefen an/aus, gespeichert in der
@@ -1318,7 +1389,7 @@ function Wechsle-GuiSprache {
     }
     # Neu bauen heisst hier neu starten (eine Fassung, ein Aufbau; einzelne
     # Texte zu tauschen vergisst drei von vier Stellen, siehe MEHRSPRACHIG.md).
-    Start-Process -FilePath (Join-Path $SkriptOrdner 'update-manager-gui.bat') -WorkingDirectory $SkriptOrdner
+    Starte-FensterNeu
     $fenster.Close()
 }
 
@@ -1434,16 +1505,23 @@ function Zeige-Aufgabe {
 # ---------------------------------------------------------------------------
 $script:LaufAnzahl = 0
 $script:SicherZahl = 0
-$script:AnsichtModus = 'verlauf'
 $script:FilterFehler = $false
 
 function Details-Offen { return ($E.PanelDetails.Visibility -eq 'Visible') }
 
 function Zeige-Details {
-    param([bool]$Ja, [string]$Modus = '')
+    # EINE Ansicht (Chip 49, David, 25.11.2026): der alte Modus-Umschalter
+    # (verlauf gegen protokoll) ist weg, beide Felder zeigen zusammen. Die
+    # Filter der Protokoll-Ansicht gehoeren zum unteren Feld und sind mit
+    # der Ansicht da. Frisch gelesen wird das Protokoll jedes Mal beim
+    # Oeffnen, damit die Ansicht nicht auf altem Stand steht.
+    param([bool]$Ja)
     $E.PanelDetails.Visibility = if ($Ja) { 'Visible' } else { 'Collapsed' }
+    $filterSicht = if ($Ja -and $AnsichtGeladen) { 'Visible' } else { 'Collapsed' }
+    $E.BtnFilterAlles.Visibility = $filterSicht
+    $E.BtnFilterFehler.Visibility = $filterSicht
     if ($Ja) {
-        Setze-Ansicht $(if ($Modus) { $Modus } else { $script:AnsichtModus })
+        if ($AnsichtGeladen) { Zeige-ProtokollAnsicht }
         if ($E.Fortschritt.IsIndeterminate) { $E.LiveRahmen.Visibility = 'Visible' }
     } else {
         $E.LiveRahmen.Visibility = 'Collapsed'
@@ -1452,14 +1530,13 @@ function Zeige-Details {
 }
 
 function Aktualisiere-Kacheln {
-    # Zahl der aktiven Quellen und welche Kachel gerade aufgeklappt ist.
-    $n = @($E.ChkWinget, $E.ChkChoco, $E.ChkWindows, $E.ChkStore, $E.ChkTreiber | Where-Object { $_.IsChecked }).Count
-    $E.TxtKachelEinst.Text = ($T['aktive_quellen_format'] -f $n)
-    $E.TxtKachelVerlauf.Text = if ($E.Fortschritt.IsIndeterminate) { $T['lief_gerade'] } else { $T['dieser_sitzung'] }
+    # Kacheln tragen Beschriftungen, keine laufende Statistik (Chip 49):
+    # "Einstellungen", "Verlauf", "Protokoll" - die Zahlen stehen in den
+    # Feldern dahinter. Hier bleibt nur die Stellung (aufgeklappt oder zu).
     $rahmen = @{
         KachelEinstellungen = ($E.PanelEinstellungen.Visibility -eq 'Visible')
-        KachelVerlauf       = ((Details-Offen) -and $script:AnsichtModus -eq 'verlauf')
-        KachelProtokolle    = ((Details-Offen) -and $script:AnsichtModus -eq 'protokoll')
+        KachelVerlauf       = (Details-Offen)
+        KachelProtokolle    = (Details-Offen)
     }
     foreach ($k in $rahmen.Keys) {
         # Der Rahmen steckt in der Vorlage; die Stellung zeigt die Hintergrundfarbe.
@@ -1499,9 +1576,8 @@ function Zeige-LetztenLaufKarte {
             $zeit = ($T['letzter_stiller_format'] -f ("$($Matches[3]).$($Matches[2]).$($Matches[1]), $($Matches[4])"))
         }
         Zeige-Ergebnis -Zahl $karte.Zahl -Satz $karte.Satz -Zeit $zeit -Ton $karte.Ton
-        $n = Get-LaufAnzahl (ConvertTo-ProtokollEintraege $zeilen)
-        $E.TxtKachelProto.Text = if ($n -eq 1) { $T['laeufe_eins'] } else { ($T['laeufe_zahl_format'] -f $n) }
-        $E.TxtKachelProtoZeit.Text = if ($lauf.Gefunden -and $lauf.Wann -match '^\d{4}-(\d\d)-(\d\d)') { ($T['kachel_zeit_format'] -f ("$($Matches[2]).$($Matches[1]).")) } else { $T['im_protokoll'] }
+        # Keine Lauf-Zaehlung mehr auf der Kachel (Chip 49): die Kachel nennt,
+        # was sie ist; die Zaehlung war eine Statistik ohne Standort.
         # Die Kopfzeile sagt dasselbe: nicht doppelt zeigen.
         $E.TxtLetzterLauf.Visibility = 'Collapsed'
     } catch {
@@ -1531,19 +1607,6 @@ function Zeige-LaufErgebnis {
     } else {
         Zeige-Ergebnis -Zahl '!' -Satz $Schluss.Status -Zeit $T['einzelheiten_details'] -Ton 'schlecht'
     }
-}
-
-function Setze-Ansicht {
-    param([string]$Modus)
-    $script:AnsichtModus = $Modus
-    $proto = ($Modus -eq 'protokoll')
-    $E.PanelVerlauf.Visibility   = if ($proto) { 'Collapsed' } else { 'Visible' }
-    $E.PanelProtokoll.Visibility = if ($proto) { 'Visible' } else { 'Collapsed' }
-    $E.BtnFilterAlles.Visibility  = if ($proto) { 'Visible' } else { 'Collapsed' }
-    $E.BtnFilterFehler.Visibility = if ($proto) { 'Visible' } else { 'Collapsed' }
-    Markiere-Knopf $E.BtnAnsichtVerlauf (-not $proto)
-    Markiere-Knopf $E.BtnAnsichtProtokoll $proto
-    if ($proto) { Zeige-ProtokollAnsicht }
 }
 
 function Markiere-Knopf {
@@ -1864,7 +1927,7 @@ $E.BtnNeueFassung.Add_Click({
             Add-Content -Path $LogPfad -Value $zeile -Encoding UTF8
         } catch { }
         if ($ok) {
-            Start-Process -FilePath (Join-Path $SkriptOrdner 'update-manager-gui.bat') -WorkingDirectory $SkriptOrdner
+            Starte-FensterNeu
             $fenster.Close()
             return
         }

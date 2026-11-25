@@ -45,19 +45,17 @@ $script:GuiTabelleDe = @{
     "neue_fassung_knopf"     = "Neue Version installieren"
     "spaeter"                = "Später"
 
-    # Kacheln
+    # Kacheln (Chip 49, David, 25.11.2026): Kacheln tragen Beschriftungen
+    # statt laufender Statistik - "5 von 5" und die Zahl der Laeufe sind weg,
+    # jetzt sagt jede Kachel, was sie ist. "Einstellungen" ersetzt "5 von 5".
     "ergebnis_zahl"          = "Anzahl"
     "updates_letzter_lauf"   = "Updates im letzten Lauf"
-    "aktive_quellen_format"  = "{0} von 5"
+    "einstellungen_titel"    = "Einstellungen"
     "quellen_aktiv"          = "Quellen aktiv"
     "verlauf"                = "Verlauf"
     "dieser_sitzung"         = "dieser Sitzung"
-    "lief_gerade"            = "läuft gerade"
     "protokoll"              = "Protokoll"
-    "im_protokoll"           = "im Protokoll"
-    "laeufe_eins"            = "1 Lauf"
-    "laeufe_zahl_format"     = "{0} Läufe"
-    "kachel_zeit_format"     = "zuletzt {0}"
+    "protokoll_zeitraum"     = "Sieben Tage"
     "einstellungen_umschalten" = "Einstellungen ein- oder ausblenden"
     "verlauf_umschalten"     = "Verlauf dieser Sitzung ein- oder ausblenden"
     "protokoll_umschalten"   = "Protokoll ein- oder ausblenden"
@@ -189,19 +187,17 @@ $script:GuiTabelleEn = @{
     "neue_fassung_knopf"     = "Install new version"
     "spaeter"                = "Later"
 
-    # Tiles
+    # Tiles (Chip 49, David, 25.11.2026): tiles carry captions instead of
+    # running statistics - "3 of 5" and the number of runs are gone; each
+    # tile says what it is. "Settings" takes the place of "3 of 5".
     "ergebnis_zahl"          = "Count"
     "updates_letzter_lauf"   = "Updates in the last run"
-    "aktive_quellen_format"  = "{0} of 5"
+    "einstellungen_titel"    = "Settings"
     "quellen_aktiv"          = "sources active"
     "verlauf"                = "History"
     "dieser_sitzung"         = "this session"
-    "lief_gerade"            = "running now"
     "protokoll"              = "Log"
-    "im_protokoll"           = "in the log"
-    "laeufe_eins"            = "1 run"
-    "laeufe_zahl_format"     = "{0} runs"
-    "kachel_zeit_format"     = "last {0}"
+    "protokoll_zeitraum"     = "Seven days"
     "einstellungen_umschalten" = "Show or hide the settings"
     "verlauf_umschalten"     = "Show or hide this session's history"
     "protokoll_umschalten"   = "Show or hide the log"

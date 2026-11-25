@@ -175,11 +175,3 @@ function Bilde-ErgebnisKarte {
     }
     return @{ Zahl = '0'; Satz = $SprachTabelle['ergeb_alles_aktuell']; Ton = 'neutral' }
 }
-
-function Get-LaufAnzahl {
-    # Wie viele stille Laeufe stehen im Protokoll (jeder endet mit SILENT-DONE oder SILENT-FAILED).
-    param($Eintraege)
-    $n = 0
-    foreach ($e in @($Eintraege)) { if ($e.Text -match 'SILENT-(DONE|FAILED)') { $n++ } }
-    return $n
-}

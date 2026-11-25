@@ -72,6 +72,7 @@ $Kern   = Join-Path $Ordner 'universal-update-manager.ps1'
 $Gui    = Join-Path $Ordner 'update-manager-gui.ps1'
 $Sprach = Join-Path $Ordner 'gui-sprache.ps1'
 $Konfig = Join-Path $Ordner 'update-config.json'
+$Bat    = Join-Path $Ordner 'update-manager-gui.bat'
 
 $Fehler = New-Object System.Collections.Generic.List[string]
 $Zeilen = New-Object System.Collections.Generic.List[string]
@@ -608,6 +609,171 @@ if (Test-Path $Gui) {
         Melde 'ok' "jedes Kürzel-Ziel ruft über seinen bestehenden Klick-Handler auf"
     } else {
         Schlecht "Kürzel-Ziele ohne eigenen Klick-Handler: $($ohneKlick -join ', ')"
+    }
+}
+
+# ── 5d. Klicksperre waehrend eines Laufs (Chip 49, David 25.11.2026) ────────
+# nutzis Messung: während eines Laufs blieben Protokoll-Knopf, Kacheln und
+# Uebernehmen klickbar, und Uebernehmen konnte einen ZWEITEN Kern-Aufruf
+# starten. Geprüft am Quelltext: JEDES schaltbare Element des Fensters
+# (Knöpfe, Kacheln, Schalter, das Zeit-Feld) steht in der Sperrliste von
+# Setze-Beschaeftigt; dieselbe Liste spricht am Laufende wieder frei.
+if (Test-Path $Gui) {
+    $guiText5d = Get-Content $Gui -Raw
+    $m5d = [regex]::Match($guiText5d, '(?s)function Setze-Beschaeftigt\s*\{.*?\r?\n\}')
+    $sperrblock5d = if ($m5d.Success) { $m5d.Value } else { '' }
+    $klickbar5d = [regex]::Matches($guiText5d, 'x:Name="(Btn[A-Za-z0-9]+|Kachel[A-Za-z]+|Chk[A-Za-z]+|TxtZeit)"') |
+        ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+    if (-not $sperrblock5d -or $klickbar5d.Count -eq 0) {
+        Schlecht 'Setze-Beschaeftigt oder schaltbare Elemente nicht auffindbar - Klicksperre nicht pruefbar'
+    } else {
+        $durch5d = @($klickbar5d | Where-Object { $sperrblock5d -notmatch ("'" + [regex]::Escape($_) + "'") })
+        if ($durch5d.Count -eq 0) {
+            Melde 'ok' "Klicksperre: alle $($klickbar5d.Count) schaltbaren Elemente stehen in der Sperrliste (zuschreiben und wieder freigeben derselbe Weg)"
+        } else {
+            Schlecht "Klicksperre: beim Lauf nicht gesperrt: $($durch5d -join ', ')"
+        }
+        # Sichtbare Rueckmeldung: gesperrte Kacheln dunkeln ab.
+        $kachel5d = [regex]::Match($guiText5d, '(?s)x:Key="Kachel".*?\r?\n\s{4}\}')
+        if ($kachel5d.Success -and $kachel5d.Value -match 'Property="IsEnabled"') {
+            Melde 'ok' 'gesperrte Kacheln zeigen den Zustand (Abdunkeln bei IsEnabled False)'
+        } else {
+            Schlecht 'Kachel-Vorlage zeigt keinen gesperrten Zustand (IsEnabled-Ausloeser fehlt)'
+        }
+
+        # Auch der Fehler-Weg gibt frei (Leiti-Befund, 25.11.2026): Der
+        # Takt-Catch raeumt auf und hebt die Klicksperre auf, sonst bliebe
+        # die FERTIG-Marke unbehandelt und ALLE Elemente dauerhaft gesperrt.
+        $takt5d = [regex]::Match($guiText5d, '(?s)\$Takt\.Add_Tick\(\{.*?\r?\n\}\)')
+        # Auch der Fehler-Weg gibt frei (Leiti-Befund, 25.11.2026, nach-
+        # geschaeft in Pruefrunde 2): Gematcht wird der CATCH-Abschnitt des
+        # Taktgebers, nicht der ganze Handler - Raeume-Lauf-Auf und
+        # Setze-Beschaeftigt stehen sonst auch im FERTIG-Zweig, die Pruefung
+        # waere hohl. Die Freigabe MUSS vor beiden Schreibe-Aufrufen stehen
+        # (jeweils eigenes try/catch): Ein zweiter Fehler im Catch darf das
+        # Freigeben nicht verhindern.
+        $takt5d = [regex]::Match($guiText5d, '(?s)\$Takt\.Add_Tick\(\{.*?\r?\n\}\)')
+        $taktCatch5d = [regex]::Match($takt5d.Value, '(?s)catch \{.*')
+        if ($takt5d.Success -and $taktCatch5d.Success -and
+            $taktCatch5d.Value -match 'Raeume-Lauf-Auf' -and
+            $taktCatch5d.Value -match 'Setze-Beschaeftigt \$false' -and
+            ($taktCatch5d.Value.IndexOf('Setze-Beschaeftigt $false') -lt $taktCatch5d.Value.IndexOf('Schreibe'))) {
+            Melde 'ok' 'Takt-Catch: Freigabe der Klicksperre ist der erste Aufruf, Raeumen und Meldung danach'
+        } else {
+            Schlecht 'Takt-Catch: Freigabe nicht erster Aufruf (Setze-Beschaeftigt $false vor Schreibe) oder Raeumen fehlt'
+        }
+    }
+}
+
+# ── 5e. Eine Ansicht fuer Verlauf plus Protokoll; Kacheln als Beschriftung ──
+# Chip 49 (David, 25.11.2026): die Verlaufs-Kachel und der Verlaufsknopf der
+# Details-Ansicht doppeln sich; "8 Laeufe" hing als Statistik an der
+# Protokoll-Kachel; "5 von 5" belegte den Platz der Einstellungen-Kachel.
+if (Test-Path $Gui) {
+    $guiText5e = Get-Content $Gui -Raw
+
+    # Der gedoppelte Verlaufsknopf ist weg, VORLAGE und Felder zeigen
+    # zusammen als eine Ansicht (beide Behaelter bleiben, kein Umschalter).
+    $doppel5e = @('BtnAnsichtVerlauf', 'BtnAnsichtProtokoll') | Where-Object { $guiText5e -match [regex]::Escape($_) }
+    $zusammen5e = ($guiText5e -match 'x:Name="PanelVerlauf"') -and ($guiText5e -match 'x:Name="PanelProtokoll"')
+    if (-not $doppel5e -and $zusammen5e) {
+        Melde 'ok' 'eine Ansicht fuer Verlauf plus Protokoll (gedoppelter Verlaufsknopf weg)'
+    } else {
+        if ($doppel5e) { Schlecht "gedoppelter Verlaufsknopf steht noch da: $($doppel5e -join ', ')" }
+        if (-not $zusammen5e) { Schlecht 'Felder Verlauf und Protokoll ohne gemeinsame Ansicht' }
+    }
+
+    # Verlauf- und Protokoll-Kachel oeffnen dieselbe_ansicht (einmal zu sein):
+    # gebuendet in einem Binding, das auf Zeige-Details schaltet.
+    $gemeinsam5e = $guiText5e -match [regex]::Escape("'KachelVerlauf', 'KachelProtokolle'") -and
+        $guiText5e -match '(?s)foreach \(\$k in @\(.{0,40}KachelProtokolle.{0,80}Zeige-Details'
+    if ($gemeinsam5e) {
+        Melde 'ok' 'Verlauf- und Protokoll-Kachel oeffnen dieselbe eine Ansicht'
+    } else {
+        Schlecht 'Kacheln Verlauf/Protokoll oeffnen nicht dieselbe Ansicht (Zeige-Details)'
+    }
+
+    # Keine laufende Statistik mehr auf den Kacheln (XAML-Platzhalter oder
+    # $T-Lesezugriff); stattdessen "Einstellungen" statt "5 von 5".
+    $statistik5e = @('aktive_quellen_format', 'im_protokoll', 'laeufe_eins', 'laeufe_zahl_format', 'kachel_zeit_format', 'lief_gerade') |
+        Where-Object { $guiText5e -match "__T_$_\b" -or $guiText5e -match [regex]::Escape("`$T['$_']") }
+    if (-not $statistik5e) {
+        Melde 'ok' 'Kacheln tragen Beschriftungen, keine laufende Statistik mehr ("8 Laeufe", "5 von 5" entfallen)'
+    } else {
+        Schlecht "Kacheln zaehlen noch: $($statistik5e -join ', ')"
+    }
+    if ($guiText5e -match '__T_einstellungen_titel__' -and $guiText5e -match '__T_protokoll_zeitraum__') {
+        Melde 'ok' "'Einstellungen' steht auf der Einstellungen-Kachel (statt '5 von 5')"
+    } else {
+        Schlecht 'Einstellungen-Kachel traegt nicht ihren Namen (einstellungen_titel) oder die Protokoll-Kachel keinen Zeitraum (protokoll_zeitraum)'
+    }
+}
+
+# ── 5f. Fenster im Arbeitsfeld responsive (Chip 49, David 25.11.2026) ──────
+# Kleine Screens rutschten die Knopfreihe unterm Rand. Gebaut, wie David es
+# verlangt hat: abhaengig von Fenster-/Bildschirmgroesse, nicht einfach
+# groesser - Hoehe an WorkArea geklemmt, Inhalt ScrollViewer, Knopfreihe
+# ausserhalb des scrollenden Bereichs.
+if (Test-Path $Gui) {
+    $guiText5f = Get-Content $Gui -Raw
+    $klemme5f = $guiText5f -match 'SystemParameters\]::WorkArea' -and
+        $guiText5f -match '\$fenster\.MaxHeight' -and
+        $guiText5f -match '\$fenster\.MinHeight'
+    if ($klemme5f) {
+        Melde 'ok' 'Fensterhoehe klemmt beim Aufbau am Arbeitsfeld (SystemParameters.WorkArea)'
+    } else {
+        Schlecht 'keine Klemmung an das Arbeitsfeld (WorkArea/MaxHeight/MinHeight fehlt)'
+    }
+
+    # Struktur: Der ScrollViewer umschliesst den Inhalt (PanelDetails drin),
+    # die Knopfreihe (BtnStart) liegt AUSSERHALB und bleibt dadurch immer
+    # sichtbar, wie hoch auch gescrollt wird. Das ENDE des AEUSSEREN
+    # ScrollViewer suchen: Das Fenster hat im Verlaufsfeld noch einen
+    # eigenen, dessen erstes Ende waere der falsche Anker.
+    $svAnfang5f = $guiText5f.IndexOf('<ScrollViewer Grid.Row="0"')
+    $svEnde5f   = if ($svAnfang5f -ge 0) { $guiText5f.LastIndexOf('</ScrollViewer>') } else { -1 }
+    $panel5f    = if ($svAnfang5f -ge 0) { $guiText5f.IndexOf('x:Name="PanelDetails"', $svAnfang5f) } else { -1 }
+    $knopf5f    = if ($svAnfang5f -ge 0) { $guiText5f.IndexOf('x:Name="BtnStart"', $svAnfang5f) } else { -1 }
+    if ($svAnfang5f -ge 0 -and $svEnde5f -gt $svAnfang5f -and
+        $panel5f -gt $svAnfang5f -and $panel5f -lt $svEnde5f -and
+        ($knopf5f -lt 0 -or $knopf5f -gt $svEnde5f)) {
+        Melde 'ok' 'Inhalt laeuft im ScrollViewer, die Knopfreihe haengt ausserhalb und verschwindet nicht unterm Rand'
+    } else {
+        Schlecht 'ScrollViewer umschliesst den Inhaltsbereich nicht - Knopfreihe kann unterm Rand landen'
+    }
+}
+
+# ── 5g. Erhoehung ohne Konsolen-Blitz (Chip 49) ─────────────────────────────
+# Die Admin-Abfrage startete die .bat neu; das Konsolenfenster blieb bis zum
+# Start des WPF-Fensters sichtbar. Jetzt: Erhoehung DIREKT gegen das
+# versteckte powershell-Fenster der Oberflaeche, mit Arbeitsverzeichnis
+# (vorherige cd /d) und ohne Neustart der .bat.
+if (Test-Path $Bat) {
+    $batText5g = Get-Content $Bat -Raw
+    $direkt5g = ($batText5g -match 'Verb RunAs') -and
+        ($batText5g -match 'WindowStyle.{0,3}Hidden') -and
+        ($batText5g -match 'WorkingDirectory') -and
+        ($batText5g -match '-File.{0,3}%~dp0update-manager-gui\.ps1')
+    $neu5g = $batText5g -match '%~f0'
+    if ($direkt5g -and -not $neu5g) {
+        Melde 'ok' 'Erhoehung startet direkt die versteckte Oberflaeche (powershell -WindowStyle Hidden -File) statt die .bat neu'
+    } else {
+        if ($neu5g) { Schlecht 'Erhoehung startet die .bat selbst neu (%~f0) - das Konsolenfenster blitzt' }
+        if (-not $direkt5g) { Schlecht 'Erhoehung ohne den direkten Weg (Verb RunAs / WindowStyle Hidden / WorkingDirectory / -File auf update-manager-gui.ps1 fehlt)' }
+    }
+
+    # Verweigern-Fall sichtbar (Leiti, 25.11.2026): UAC abgelehnt oder das
+    # erhoehte PowerShell stirbt beim Start - der Fehler gehoert ins
+    # bat-Fenster (echo plus pause) UND in die Protokolldatei.
+    $ablehnen5g = ($batText5g -match '-ErrorAction Stop') -and
+        ($batText5g -match 'Add-Content') -and
+        ($batText5g -match 'if errorlevel 1') -and
+        ($batText5g -match 'universal-update-manager\.log') -and
+        ($batText5g -match 'pause')
+    if ($ablehnen5g) {
+        Melde 'ok' 'verweigerte UAC oder sterbendes erhoehtes PowerShell ist sichtbar (echo plus pause) und landet im Protokoll'
+    } else {
+        Schlecht 'verweigern-Fall unsichtbar oder ungeloggt (ErrorAction Stop / Add-Content / errorlevel-Pruefung / pause fehlt)'
     }
 }
 
@@ -1469,8 +1635,9 @@ if (-not (Test-Path $Ansicht)) {
         $z = Get-ProtokollZaehler $e
         Pruefe ($z.Fehler -eq 2 -and $z.Warnungen -eq 1) "Zaehler: $($z.Fehler) Fehler, $($z.Warnungen) Warnungen"
 
-        Pruefe ((Get-LaufAnzahl $e) -eq 2) "Laufzaehler: $(Get-LaufAnzahl $e) statt 2 (ein FAILED, ein DONE)"
-        Pruefe ((Get-LaufAnzahl @()) -eq 0) 'Laufzaehler ohne Eintraege muss 0 sein'
+        # Kein Get-LaufAnzahl mehr: Mit dem Chip-49-Umbau (Kacheln sind
+        # Beschriftung) ist der Laufzaehler aus dem Fenster und die Funktion
+        # aus protokoll-ansicht.ps1 entfernt.
         $heute = [datetime]'2026-10-08 12:00'
         Pruefe ((Get-TagesKopf '2026-10-08' $heute -SprachTabelle $T) -eq 'Heute, 8. Oktober 2026') "Tageskopf heute: $(Get-TagesKopf '2026-10-08' $heute -SprachTabelle $T)"
         Pruefe ((Get-TagesKopf '2026-10-07' $heute -SprachTabelle $T) -eq 'Gestern, 7. Oktober 2026') 'Tageskopf gestern'
