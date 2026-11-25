@@ -1178,6 +1178,38 @@ $E.LinkMelucio.Add_RequestNavigate({
 
 $E.BtnSchliessen.Add_Click({ $fenster.Close() })
 
+# ---------------------------------------------------------------------------
+#  Keyboard shortcuts (Leiti order, 24.11.2026)
+# ---------------------------------------------------------------------------
+# Five Ctrl combos on the EXISTING buttons: raising the WPF Click event on a
+# button is exactly what a mouse click does, so there is no second code path
+# into the logic. PreviewKeyDown on the window catches the keys whatever
+# element holds the focus; everything without Ctrl travels on untouched.
+# With the focus inside a text field the handler keeps out of the way
+# entirely, so typing is never intercepted. A disabled button (a run is in
+# progress) stays silent, just as a click on it would.
+$Shortcuts = @{
+    [System.Windows.Input.Key]::S = 'BtnStart'
+    [System.Windows.Input.Key]::N = 'BtnPruefen'
+    [System.Windows.Input.Key]::P = 'BtnProtokoll'
+    [System.Windows.Input.Key]::F = 'KachelEinstellungen'
+    [System.Windows.Input.Key]::Q = 'BtnSchliessen'
+}
+$fenster.Add_PreviewKeyDown({
+    param($sender, $keyEvent)
+    if (([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control) -eq 0) { return }
+    # Focus in a text field: hands off, the field owns the keys.
+    if ([System.Windows.Input.Keyboard]::FocusedElement -is [System.Windows.Controls.TextBoxBase]) { return }
+    # An unmapped combo (say Ctrl+C on a button) must do nothing at all:
+    # without this guard the lookup yields $null and the $E index with a
+    # $null key throws under StrictMode - the window would go down.
+    if (-not $Shortcuts.ContainsKey($keyEvent.Key)) { return }
+    $knopf = $E[$Shortcuts[$keyEvent.Key]]
+    if (-not $knopf -or -not $knopf.IsEnabled) { return }
+    $keyEvent.Handled = $true
+    $knopf.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+})
+
 # Beim Schliessen aufraeumen: Ein Kindprozess, der weiterinstalliert, waehrend
 # sein Fenster weg ist, ist genau die Sorte Geist, die man spaeter im
 # Task-Manager sucht.

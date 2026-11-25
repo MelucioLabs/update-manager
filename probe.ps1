@@ -459,6 +459,60 @@ if (Test-Path $Gui) {
     }
 }
 
+# ── 5c. Tastaturkürzel: fünf Wege auf bestehende Knöpfe ─────────────────────
+# Leitis Auftrag (24.11.2026): Strg+S Aktualisieren, Strg+N Nur nachsehen,
+# Strg+P Protokoll, Strg+F Einstellungen, Strg+Q Schliessen. Geprüft wird am
+# Quelltext: Der Handler hängt am Fenster, die Zuordnung nennt genau die
+# bestehenden Elemente (die ihren Klick-Handler tragen), keine Taste ist
+# doppelt belegt, und Eingabefelder bleiben unangetastet.
+if (Test-Path $Gui) {
+    $guiText5c = Get-Content $Gui -Raw
+
+    if ($guiText5c -match '\$fenster\.Add_PreviewKeyDown') {
+        Melde 'ok' "Kürzel-Handler hängt am Fenster (PreviewKeyDown)"
+    } else {
+        Schlecht "kein Kürzel-Handler am Fenster (Add_PreviewKeyDown fehlt)"
+    }
+
+    if ($guiText5c -match 'ModifierKeys\]::Control' -and
+        $guiText5c -match 'FocusedElement -is \[System\.Windows\.Controls\.TextBoxBase\]') {
+        Melde 'ok' "Kürzel greifen nur mit Strg und treten in Eingabefeldern zurück"
+    } else {
+        Schlecht "Kürzel-Handler prüft Strg oder Eingabefeld-Fokus nicht (Tippen darf nicht behindert werden)"
+    }
+
+    # Ohne ContainsKey-Wächter liefert die Zuordnungs-Abfrage für eine NICHT
+    # belegte Taste $null, und der Index mit $null-Schlüssel wirft unter
+    # StrictMode: Strg+C auf einem Knopf hätte das Fenster abgeworfen.
+    if ($guiText5c -match 'if \(-not \$Shortcuts\.ContainsKey\(\$keyEvent\.Key\)\)\s*\{ return \}') {
+        Melde 'ok' "nicht belegte Kürzel werden abgefangen (ContainsKey-Wächter vor dem Index)"
+    } else {
+        Schlecht "kein ContainsKey-Wächter im Kürzel-Handler — Strg plus belegungsfremde Taste wirft unter StrictMode"
+    }
+
+    $sollZuordnung = @{ S = 'BtnStart'; P = 'BtnProtokoll'; Q = 'BtnSchliessen'; N = 'BtnPruefen'; F = 'KachelEinstellungen' }
+    $zuordnung = [regex]::Matches($guiText5c, "\[System\.Windows\.Input\.Key\]::(\w+)\s*=\s*'(\w+)'") |
+        ForEach-Object { [pscustomobject]@{ Taste = $_.Groups[1].Value; Element = $_.Groups[2].Value } }
+
+    $doppelt = @($zuordnung | Group-Object Taste | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name })
+    $falsch  = @($zuordnung | Where-Object { $sollZuordnung[$_.Taste] -ne $_.Element })
+    $fehlt   = @($sollZuordnung.Keys | Where-Object { @($zuordnung | ForEach-Object { $_.Taste }) -notcontains $_ })
+    if ($doppelt.Count -eq 0 -and $falsch.Count -eq 0 -and $fehlt.Count -eq 0) {
+        Melde 'ok' "alle fünf Kürzel sitzen am richtigen Element, keine Taste doppelt"
+    } else {
+        if ($doppelt.Count -gt 0) { Schlecht "doppelt belegte Kürzel: $($doppelt -join ', ')" }
+        if ($falsch.Count -gt 0)  { Schlecht "falsch zugeordnete Kürzel: $(($falsch | ForEach-Object { "Strg+$($_.Taste) -> $($_.Element)" }) -join ', ')" }
+        if ($fehlt.Count -gt 0)   { Schlecht "fehlende Kürzel: $(($fehlt | ForEach-Object { "Strg+$_" }) -join ', ')" }
+    }
+
+    $ohneKlick = @($sollZuordnung.Values | Where-Object { $e = $_; $guiText5c -notmatch [regex]::Escape("`$E.$e.Add_Click") })
+    if ($ohneKlick.Count -eq 0) {
+        Melde 'ok' "jedes Kürzel-Ziel ruft über seinen bestehenden Klick-Handler auf"
+    } else {
+        Schlecht "Kürzel-Ziele ohne eigenen Klick-Handler: $($ohneKlick -join ', ')"
+    }
+}
+
 # ── 6. Verhalten: die drei Ausgaenge eines Jobs ─────────────────────────────
 #
 # Die einzige Stelle im Manager, die wirklich LAEUFT statt gelesen zu werden.
