@@ -107,9 +107,11 @@ ab dem ersten signierten Release gilt, stehen in
 
 ### Schnellstart:
 1. Alle Dateien in einen Ordner herunterladen
-2. Doppelklick auf `universal-update-manager.bat`
+2. Doppelklick auf `update-manager-gui.vbs` für das Fenster: ein
+   wscript-Starter ganz ohne Konsolenblitz. Er holt die Admin-Erhöhung selbst,
+   und nie nimmt ein cmd- oder PowerShell-Fenster Platz ein.
 3. Admin-Erhöhung bestätigen
-4. Option aus Menü wählen
+4. Das Fenster öffnet sich; `universal-update-manager.bat` startet das Konsolenmenü
 
 ### Manuelle Ausführung:
 ```powershell
@@ -347,7 +349,8 @@ nicht aus dem Namen geraten.
 update-manager/
 ├── universal-update-manager.bat    # Starter (Admin-Erhöhung), Konsolenmenü
 ├── universal-update-manager.ps1    # Haupt-Script
-├── update-manager-gui.bat          # Starter für das Fenster (Admin-Erhöhung)
+├── update-manager-gui.bat          # Starter für das Fenster (Admin-Erhöhung), Konsolenstart
+├── update-manager-gui.vbs          # Blitzfreier wscript-Starter für das Fenster (nie eine Konsole)
 ├── update-manager-gui.ps1          # Fenster (WPF)
 ├── update-config.json              # Vorgabe-Konfiguration
 ├── update-config.local.json        # Eigene Einstellungen (nicht ausgeliefert, übersteht Updates)

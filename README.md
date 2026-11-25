@@ -106,9 +106,10 @@ that applies from the first signed release are in
 
 ### Quick Start:
 1. Download all files to a folder
-2. Double-click `universal-update-manager.bat`
+2. Double-click `update-manager-gui.vbs` for the window - a wscript starter
+   without any console flash (it asks for admin elevation by itself)
 3. Confirm admin elevation
-4. Select option from menu
+4. The window opens; `universal-update-manager.bat` starts the console menu
 
 ### Manual Execution:
 ```powershell
@@ -286,7 +287,8 @@ count if there was one. A run without a window is otherwise invisible.
 update-manager/
 ├── universal-update-manager.bat    # Launcher (admin elevation), console menu
 ├── universal-update-manager.ps1    # Main script
-├── update-manager-gui.bat          # Launcher for the window (admin elevation)
+├── update-manager-gui.bat          # Launcher for the window (admin elevation), console start
+├── update-manager-gui.vbs          # Flash-free wscript starter for the window (no console at all)
 ├── update-manager-gui.ps1          # Window (WPF)
 ├── update-config.json              # Default configuration
 ├── update-config.local.json        # Own settings (not shipped, survives updates)

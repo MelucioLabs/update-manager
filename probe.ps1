@@ -73,6 +73,8 @@ $Gui    = Join-Path $Ordner 'update-manager-gui.ps1'
 $Sprach = Join-Path $Ordner 'gui-sprache.ps1'
 $Konfig = Join-Path $Ordner 'update-config.json'
 $Bat    = Join-Path $Ordner 'update-manager-gui.bat'
+$Vbs    = Join-Path $Ordner 'update-manager-gui.vbs'
+$Setup  = Join-Path $Ordner 'installer\update-manager.iss'
 
 $Fehler = New-Object System.Collections.Generic.List[string]
 $Zeilen = New-Object System.Collections.Generic.List[string]
@@ -775,6 +777,73 @@ if (Test-Path $Bat) {
         Schlecht 'verweigern-Fall unsichtbar oder ungeloggt (ErrorAction Stop / Add-Content / errorlevel-Pruefung / pause fehlt)'
     }
 }
+
+# ── 5h. Starter ohne jeden Konsolen-Blitz (Chip 53, nutzi A / David 25.11.2026) ─
+# Durch eine .bat zu starten heisst immer: Irgendein cmd-Fenster steht kurz
+# da, auch minimiert. Der bewaehrte Starter-Trick ist wscript: Eine .vbs
+# besitzt NIE eine Konsole, und sie holt die Erhoehung direkt gegen das
+# versteckte Fenster der Oberflaeche (derselbe field-verified -Command-Weg
+# wie in 5g, denn erhoeht + versteckt + -File endet im -196608-Exit).
+# Der Verweigern-Fall bleibt sichtbar (Leiti, 25.11.2026): Protokollzeile
+# plus Meldung, weil wscript KEIN Konsolenfenster zum Lesen hat. Die .vbs
+# muss ANSI bleiben: wscript liest kein UTF-8, die Umlaute wuerden brechen.
+$vbsDa = Test-Path $Vbs
+if ($vbsDa) {
+    # Explizit als Windows-1252 dekodieren: wscript liest die Datei als ANSI,
+    # und 'Default' meint in Windows PowerShell 5.1 ANSI, in pwsh aber UTF-8.
+    $vbsText5h = [System.Text.Encoding]::GetEncoding(1252).GetString([System.IO.File]::ReadAllBytes($Vbs))
+
+    $direct5h = ($vbsText5h -match 'ShellExecute') -and
+        ($vbsText5h -match 'runas') -and
+        ($vbsText5h -match 'WindowStyle.{0,3}Hidden') -and
+        ($vbsText5h -match 'Set-Location -LiteralPath') -and
+        ($vbsText5h -match "\& '") -and
+        ($vbsText5h -match 'update-manager-gui\.ps1')
+    if ($direct5h) {
+        Melde 'ok' 'Starter holt die Erhoehung direkt gegen das versteckte GUI-PowerShell (-Command mit &), ganz ohne Konsolenfenster'
+    } else {
+        Schlecht 'Starter ohne den direkten Erhoehungsweg (ShellExecute runas / WindowStyle Hidden / -Command Immutable-&-Aufruf von update-manager-gui.ps1 fehlt)'
+    }
+    if ($vbsText5h -match '\-File') {
+        Schlecht 'Starter startet ueber -File - erhoeht plus versteckt stirbt mit -196608, nur der -Command-Weg geht'
+    }
+
+    $sichtbar5h = ($vbsText5h -match 'MsgBox') -and
+        ($vbsText5h -match 'OpenTextFile') -and
+        ($vbsText5h -match 'universal-update-manager\.log') -and
+        ($vbsText5h -match 'WScript\.Quit 1')
+    if ($sichtbar5h) {
+        Melde 'ok' 'verweigerte UAC oder sterbendes erhoehtes PowerShell bleibt sichtbar (Protokollzeile plus Meldung) und endet mit Fehler'
+    } else {
+        Schlecht 'Verweigern-Fall im Starter unsichtbar oder ungeloggt (MsgBox / Protokoll-Schreibweise / Quit fehlt)'
+    }
+
+    if (($vbsText5h -match 'Erhöhung') -and ($vbsText5h -match 'verweigert')) {
+        Melde 'ok' 'die .vbs ist ANSI und traegt echte Umlaute, nicht Kaestchen'
+    } else {
+        Schlecht 'die .vbs ist nicht ANSI (Encoding gebrochen) oder die Meldungstexte tragen keine Umlaute'
+    }
+} else {
+    Schlecht 'der Starter update-manager-gui.vbs fehlt - der Start geht wieder durch ein .bat-Konsolenfenster'
+}
+
+# Der Installer muss denselben Weg fahren: Verknuepfungen und der
+# Postinstall-Start zeigen auf wscript mit der .vbs, nicht auf die .bat.
+# Die Pruefung liest den Installer nur, wenn er im Repo liegt; sie schweigt,
+# wenn die Datei fehlt.
+if (Test-Path $Setup) {
+    $setupText5h = Get-Content $Setup -Raw
+    $aufStarter5h = ($setupText5h -match 'wscript\.exe') -and
+        ($setupText5h -match 'update-manager-gui\.vbs')
+    $aufBat5h = $setupText5h -match 'Filename: ".*update-manager-gui\.bat"'
+    if ($aufStarter5h -and -not $aufBat5h) {
+        Melde 'ok' 'Installer-Verknuepfungen zeigen auf den starter-ohne-Blitz (wscript plus .vbs), nicht mehr auf die .bat'
+    } else {
+        if ($aufBat5h) { Schlecht 'Installer-Verknuepfung zeigt noch direkt auf update-manager-gui.bat - das Konsolenfenster blitzt weiter' }
+        if (-not $aufStarter5h) { Schlecht 'Installer kennt den Starter nicht (wscript.exe mit update-manager-gui.vbs fehlt)' }
+    }
+}
+
 
 # ── 6. Verhalten: die drei Ausgaenge eines Jobs ─────────────────────────────
 #

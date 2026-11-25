@@ -109,6 +109,7 @@ Source: "..\protokoll-kurz.ps1";          DestDir: "{app}"; Flags: ignoreversion
 Source: "..\bios-stand.ps1";              DestDir: "{app}"; Flags: ignoreversion
 Source: "..\universal-update-manager.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\update-manager-gui.bat";       DestDir: "{app}"; Flags: ignoreversion
+Source: "..\update-manager-gui.vbs";       DestDir: "{app}"; Flags: ignoreversion
 Source: "..\update-config.json";           DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\icon.ico";              DestDir: "{app}"; DestName: "logo.ico"; Flags: ignoreversion
 Source: "..\probe.ps1";                    DestDir: "{app}"; Flags: ignoreversion
@@ -118,15 +119,16 @@ Source: "..\README_DE.md";                 DestDir: "{app}"; Flags: ignoreversio
 Source: "..\CODE-SIGNING-POLICY.md";      DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-; Die Verknuepfung zeigt auf die .bat und NICHT direkt auf powershell.exe:
-; Die Oberflaeche braucht Administratorrechte und fordert sie nicht selbst an
-; (sie meldet nur, dass sie fehlen). Die .bat holt die Erhoehung per UAC und
-; startet dann powershell -WindowStyle Hidden. runminimized haelt das kurze
-; Konsolenfenster vor der UAC-Abfrage klein.
-Name: "{group}\{#AppName}"; Filename: "{app}\update-manager-gui.bat"; WorkingDir: "{app}"; IconFilename: "{app}\logo.ico"; Comment: "{cm:GuiKommentar}"; Flags: runminimized
+; Chip 53 (25.11.2026): Die GUI-Verknuepfung zeigt auf den Starter ohne
+; Konsolenblitz (update-manager-gui.vbs ueber wscript — wscript belegt nie
+; eine Konsole, also blitzt beim Start weder cmd noch PowerShell; die .vbs
+; holt die Erhoehung per UAC selbst und startet das Fenster versteckt).
+; Die .bat bleibt im Paket: Wer von der Konsole aus startet, behaelt sie,
+; und ihre Fehlermeldung (UAC verweigert) liest sie im Fenster aus.
+Name: "{group}\{#AppName}"; Filename: "wscript.exe"; Parameters: """{app}\update-manager-gui.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\logo.ico"; Comment: "{cm:GuiKommentar}"
 Name: "{group}\{cm:KonsoleName}"; Filename: "{app}\universal-update-manager.bat"; WorkingDir: "{app}"; IconFilename: "{app}\logo.ico"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\update-manager-gui.bat"; WorkingDir: "{app}"; IconFilename: "{app}\logo.ico"; Comment: "{cm:GuiKommentar}"; Flags: runminimized; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}"; Filename: "wscript.exe"; Parameters: """{app}\update-manager-gui.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\logo.ico"; Comment: "{cm:GuiKommentar}"; Tasks: desktopicon
 
 [Run]
 ; Hintergrund-Pruefung ueber den vorhandenen Parameter -AufgabeZeit HH:MM
@@ -141,8 +143,9 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\update-manager-gui.bat"; Work
 Filename: "{#PsExe}"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\universal-update-manager.ps1"" -AufgabeZeit 04:00"; StatusMsg: "{cm:AufgabeWirdEingerichtet}"; Tasks: hintergrund; Check: AufgabeFehlt; Flags: runhidden waituntilterminated
 
 ; Nach der Installation oeffnen. postinstall startet als urspruenglicher
-; (nicht erhoehter) Nutzer; die .bat fragt dann selbst per UAC.
-Filename: "{app}\update-manager-gui.bat"; Description: "{cm:StartGui}"; WorkingDir: "{app}"; Flags: postinstall nowait skipifsilent shellexec runminimized
+; (nicht erhöhter) Nutzer; der Starter holt die Rechte dann selbst per UAC —
+; derselbe Weg wie die Verknuepfung, ohne Konsolenfenster (Chip 53).
+Filename: "wscript.exe"; Parameters: """{app}\update-manager-gui.vbs"""; Description: "{cm:StartGui}"; WorkingDir: "{app}"; Flags: postinstall nowait skipifsilent shellexec
 
 [UninstallRun]
 ; Die geplante Aufgabe gehoert zur Installation und geht mit ihr.
