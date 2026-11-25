@@ -56,7 +56,6 @@ WizardStyle=modern
 ; Sprache nach Windows-Anzeigesprache, der Dialog nur, wenn sie nicht passt.
 ShowLanguageDialog=auto
 UninstallDisplayName={#AppName}
-UninstallDisplayIcon={#PsExe}
 ; Eigenes Symbol: das Setup traegt das Marken-Icon, die Verknuepfungen
 ; und die installierte Oberflaeche ebenfalls (assets\icon.ico, als logo.ico
 ; neben das Skript kopiert; das Fenster such es dort, im Repo-Fall unter assets).
