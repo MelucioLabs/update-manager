@@ -329,6 +329,16 @@ AMD und Mobil-CPUs werden nicht bewertet. Das Einspielen bleibt Handarbeit.
 (MDM-Weg, braucht Administratorrechte). Für die NVIDIA App gibt es keinen
 dokumentierten stillen Weg; sie öffnet weiter ihr Fenster.
 
+**Sicherheitsrelevante Kennzeichnung (seit 25.11.2026):** Beim Nachsehen
+(Knopf „Was steht an" im Fenster bzw.
+`universal-update-manager.ps1 -Auftrag pruefen`) markiert der Manager die
+Windows-Updates, die der Update-Dienst **selbst** als Sicherheitsupdates
+einstuft. Die Einstufung kommt aus der festen WSUS-Klassifizierungs-GUID und
+gilt sprachunabhängig; die Zahl steht auch im Ergebnis des Fensters.
+Kennzeichnet wird nur, wo eine Quelle es zuverlässig selbst sagt: Winget und
+Chocolatey liefern dazu nichts, dort steht keine Kennzeichnung und es wird
+nicht aus dem Namen geraten.
+
 ---
 
 ## Datei-Struktur

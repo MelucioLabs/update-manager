@@ -232,6 +232,8 @@ if ($UILang -eq "de") {
         "check_found"           = "Paket(e) koennten aktualisiert werden."
         "check_none"            = "Alles aktuell."
         "check_windows"         = "Windows Update:"
+        "check_sicher_kenn"     = "[Sicherheitsrelevant]"
+        "check_sicher_sum"      = "Sicherheitsupdates"
         "store_scan_start"      = "Store-Updates werden im Hintergrund angestossen..."
         "store_scan_done"       = "Angestossen. Der Store laedt und installiert selbst weiter."
         "store_scan_hint"       = "Kein Fenster noetig. Was eine Kontoanmeldung braucht, bleibt liegen."
@@ -531,6 +533,8 @@ if ($UILang -eq "de") {
         "check_found"           = "package(s) could be updated."
         "check_none"            = "Everything up to date."
         "check_windows"         = "Windows Update:"
+        "check_sicher_kenn"     = "[Security relevant]"
+        "check_sicher_sum"      = "security updates"
         "store_scan_start"      = "Triggering Store updates in the background..."
         "store_scan_done"       = "Triggered. The Store downloads and installs on its own."
         "store_scan_hint"       = "No window needed. Anything requiring a signed-in account stays pending."
@@ -1691,11 +1695,21 @@ function Update-Chocolatey {
     }
 }
 
-function Search-WindowsUpdateTitel {
+function Search-WindowsUpdateEntries {
     <#
-        Fragt den Windows-Update-Dienst direkt (COM), ohne PSWindowsUpdate,
-        und gibt die Titel zurueck — als Job-Ergebnis mit Zustand, wie
-        Run-JobWithTimeout es liefert. Sucht nur, aendert nichts.
+        Asks the Windows Update service directly (COM), without
+        PSWindowsUpdate, and returns ONE entry per offered update: its title
+        plus whether Windows itself classifies it as a security update.
+        Read-only; returns a job result with state, as Run-JobWithTimeout
+        gives it.
+
+        WHY A CLASSIFICATION HERE (08.11.2026, task "Sicherheitspruefung").
+        The classification is only trustworthy where the SOURCE delivers it:
+        the Windows Update service tags every update with stable WSUS
+        classification GUIDs, independent of the system language. Winget and
+        Chocolatey provide NO such flag at all — over those, nothing is
+        marked here, and nothing is guessed from the package name.
+        Security Updates GUID: 0FA1201D-4330-4FA8-8AE9-B877473B6441.
     #>
     param([switch]$Optional, [int]$TimeoutSeconds = 120)
     $kriterium = "IsInstalled=0 and IsHidden=0"
@@ -1703,14 +1717,57 @@ function Search-WindowsUpdateTitel {
     $block = [scriptblock]::Create(
         "`$sitzung = New-Object -ComObject Microsoft.Update.Session`n" +
         "`$fund = `$sitzung.CreateUpdateSearcher().Search(`"$kriterium`")`n" +
-        "foreach (`$u in `$fund.Updates) { [string]`$u.Title }")
+        "foreach (`$u in `$fund.Updates) {`n" +
+        "    `$sicher = `$false`n" +
+        "    foreach (`$k in `$u.Categories) { if (`$k.CategoryID -eq [guid]'0FA1201D-4330-4FA8-8AE9-B877473B6441') { `$sicher = `$true } }`n" +
+        "    [pscustomobject]@{ Titel = [string]`$u.Title; Sicherheit = `$sicher }`n" +
+        "}")
     return Run-JobWithTimeout -ScriptBlock $block -TimeoutSeconds $TimeoutSeconds
+}
+
+function Search-WindowsUpdateTitel {
+    <#
+        Asks the Windows Update service directly (COM), without
+        PSWindowsUpdate, and returns the titles — as a job result with
+        state, as Run-JobWithTimeout gives it. Read-only.
+        Delegates to Search-WindowsUpdateEntries so the search exists only
+        once; callers that read titles only keep their string result.
+    #>
+    param([switch]$Optional, [int]$TimeoutSeconds = 120)
+    $erg = Search-WindowsUpdateEntries -Optional:$Optional -TimeoutSeconds $TimeoutSeconds
+    $titel = if ($null -eq $erg.Ausgabe) { $null } else { @($erg.Ausgabe | ForEach-Object { "$($_.Titel)" }) }
+    return [pscustomobject]@{
+        Zustand  = $erg.Zustand
+        Ausgabe  = $titel
+        Fehler   = $erg.Fehler
+        Sekunden = $erg.Sekunden
+    }
 }
 
 function Select-WeitereUpdates {
     <# Die angebotenen Titel, die in der bekannten Liste NICHT vorkommen. #>
     param([string[]]$Angeboten = @(), [string[]]$Bekannt = @())
     return @($Angeboten | Where-Object { $_ -and ($Bekannt -notcontains $_) } | Select-Object -Unique)
+}
+
+function Split-WindowsUpdateSecurity {
+    <#
+        Splits the Windows Update search results into titles (all, in the
+        order delivered) and the share that Windows itself classifies as
+        security updates. An entry WITHOUT a title or WITHOUT the flag
+        (an older core, a mock in the probe) counts as NOT
+        security-relevant: no guessing, and the titles keep working even
+        if the flag is missing.
+    #>
+    param($Entries = @())
+    $titles = @()
+    $secure = @()
+    foreach ($e in @($Entries | Where-Object { $null -ne $_ })) {
+        $name = if ($e.PSObject.Properties['Titel']) { "$($e.Titel)" } else { "$e" }
+        $titles += $name
+        if ($e.PSObject.Properties['Sicherheit'] -and $e.Sicherheit) { $secure += $name }
+    }
+    return @{ Titel = @($titles); Sicher = @($secure) }
 }
 
 function Write-WindowsWeitereUpdates {
@@ -2812,16 +2869,35 @@ function Show-OffeneUpdates {
     if (-not ($Global:Config -and -not $Global:Config.updateSources.windowsUpdate.enabled)) {
         Write-Host "$($T['check_windows'])" -ForegroundColor $ColorInfo
         $wuGrenze = if ($Global:Config -and $Global:Config.updateSources.windowsUpdate.timeoutSeconds) { $Global:Config.updateSources.windowsUpdate.timeoutSeconds } else { 120 }
-        $wuTitel = Lies-JobAusgabe (Search-WindowsUpdateTitel -TimeoutSeconds $wuGrenze) $T['wu_timeout'] $wuGrenze
-        if ($null -ne $wuTitel) {
-            if ($wuTitel.Count -gt 0) {
-                $wuTitel | ForEach-Object { Write-Host "   $_" -ForegroundColor White }
-                Write-Host "   $($wuTitel.Count) $($T['check_found'])`n" -ForegroundColor $ColorWarning
-                Write-Log "$($T['check_windows']) $($wuTitel.Count)" "INFO"
+        # Entries, not only titles: the service says per update whether it is
+        # security-relevant (Split-WindowsUpdateSecurity). Winget and
+        # Chocolatey offer no such flag, which is why the two lists above
+        # stay unmarked instead of guessing from a package name.
+        $wuFund = Lies-JobAusgabe (Search-WindowsUpdateEntries -TimeoutSeconds $wuGrenze) $T['wu_timeout'] $wuGrenze
+        if ($null -ne $wuFund) {
+            $wu = Split-WindowsUpdateSecurity -Entries $wuFund
+            if ($wu.Titel.Count -gt 0) {
+                $marker = $T['check_sicher_kenn']
+                foreach ($e in $wuFund) {
+                    $name = if ($e.PSObject.Properties['Titel']) { "$($e.Titel)" } else { "$e" }
+                    if ($e.PSObject.Properties['Sicherheit'] -and $e.Sicherheit) {
+                        Write-Host "   $marker  $name" -ForegroundColor $ColorError
+                    } else {
+                        Write-Host "   $name" -ForegroundColor White
+                    }
+                }
+                $wuSicher = @($wu.Sicher)
+                if ($wuSicher.Count -gt 0) {
+                    Write-Host "   $($T['check_sicher_sum']): $($wuSicher.Count)" -ForegroundColor $ColorError
+                    Write-Log "$($T['check_windows']) $($wu.Titel.Count) ($($T['check_sicher_sum']): $($wuSicher.Count))" "WARNING"
+                } else {
+                    Write-Log "$($T['check_windows']) $($wu.Titel.Count)" "INFO"
+                }
+                Write-Host "   $($wu.Titel.Count) $($T['check_found'])`n" -ForegroundColor $ColorWarning
             } else {
                 Write-Host "   $($T['check_none'])`n" -ForegroundColor $ColorSuccess
             }
-            Write-WindowsWeitereUpdates -Bekannt @($wuTitel | ForEach-Object { "$_" }) -TimeoutSeconds $wuGrenze
+            Write-WindowsWeitereUpdates -Bekannt $wu.Titel -TimeoutSeconds $wuGrenze
         }
     }
 }

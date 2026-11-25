@@ -41,6 +41,7 @@
       9b. Der stille Lauf: keine Liste ist kein "nichts offen", Benutzer-
           Pakete werden nachgeholt, [SILENT-DONE] nur ohne Fehler.
       9c. Windows Update nennt optionale Updates und laedt nichts ungefragt.
+      9cb. Sicherheitsrelevante Kennzeichnung: nur, wo die Quelle es selbst sagt.
       9d. Zeitgrenze beendet den ganzen Prozessbaum und sagt, was sie mass.
       9e. Das Protokoll haelt sieben Tage.
 
@@ -794,6 +795,57 @@ function Search-WindowsUpdateTitel { param([switch]$Optional, [int]$TimeoutSecon
         } else {
             Schlecht "die Rueckfrage zum Nachladen von PSWindowsUpdate beantwortet sich ohne Tastatur mit Ja (Antworten: '$taste', Vorgabe gesetzt: $fragtNein)"
         }
+    }
+}
+
+# ── 9cb. Sicherheitsrelevante Kennzeichnung: nur, wo die Quelle es sagt ─────
+#
+# Der Windows-Update-Dienst stuft jedes Update selbst ein — über stabile
+# WSUS-Klassifizierungs-GUIDs, unabhängig von der Systemsprache. Winget und
+# Chocolatey liefern dazu NICHTS; über die wird nicht geraten. Gegen Attrappen:
+# die echte Suche beim Dienst läuft hier nicht (Netz, bis zu einer Minute).
+if (Test-Path $Kern) {
+    $fnSicher = Hole-Funktion $Kern @('Split-WindowsUpdateSecurity')
+    if (-not $fnSicher) {
+        Schlecht "Split-WindowsUpdateSecurity fehlt — Sicherheitsupdates werden nicht ausgezeichnet"
+    } else {
+        $g = & ([scriptblock]::Create($fnSicher + "`n" +
+                '(Split-WindowsUpdateSecurity -Entries @(' +
+                "[pscustomobject]@{ Titel = 'Defender-Signatur'; Sicherheit = `$true }," +
+                "[pscustomobject]@{ Titel = 'Treiber A'; Sicherheit = `$false }," +
+                "[pscustomobject]@{ Titel = 'Ohne Angabe' }" +
+                ')) | ForEach-Object { "{0}:{1}" -f $_.Titel.Count, $_.Sicher.Count }' ))
+        if ($g -eq '3:1') {
+            Melde 'ok' "Kennzeichnung: nur die Angabe des Dienstes zaehlt, Eintraege ohne Angabe werden nicht geraten"
+        } else { Schlecht "Kennzeichnung: die Trennung stimmt nicht ('$g', erwartet '3:1')" }
+
+        $leer = & ([scriptblock]::Create($fnSicher + "`n" +
+                '(Split-WindowsUpdateSecurity -Entries @() | ForEach-Object { $_.Sicher.Count })'))
+        if ("$leer" -eq '0') { Melde 'ok' "Kennzeichnung: eine leere Suche meldet keine Sicherheitsupdates" }
+        else { Schlecht "Kennzeichnung: eine leere Suche wird falsch bewertet ('$leer')" }
+    }
+
+    $kernText9cb = Get-Content $Kern -Raw
+    if ($kernText9cb -match '0FA1201D-4330-4FA8-8AE9-B877473B6441') {
+        Melde 'ok' "die Einstufung kommt aus der festen Klassifizierungs-GUID des Dienstes, nicht aus dem Namen"
+    } else { Schlecht "die Einstufung basiert nicht auf der Dienst-Klassifizierung (GUID fehlt)" }
+
+    $fnOffen = Hole-Funktion $Kern @('Show-OffeneUpdates')
+    if ($fnOffen) {
+        if ($fnOffen -match 'Search-WindowsUpdateEntries' -and $fnOffen -match 'check_sicher_kenn') {
+            Melde 'ok' "'Was steht an' setzt die Kennzeichnung vor jedes Sicherheitsupdate und nennt die Zahl"
+        } else { Schlecht "'Was steht an' nutzt die Kennzeichnung nicht (Entries oder Marker fehlen)" }
+    } else { Schlecht "Show-OffeneUpdates nicht im Kern gefunden — Aufbau geaendert?" }
+
+    if (Test-Path $Gui) {
+        $guiText9cb = Get-Content $Gui -Raw
+        # Eingehaengt, nicht kopiert: Das Fenster baut sein Suchmuster aus der
+        # Sprachtabelle des Kerns (Konstante check_sicher_kenn). Steht der
+        # Marker nur noch im Fenster, laufen Fensterzaehlung und Protokoll-
+        # Warnung auseinander, sobald einer von beiden sich aendert.
+        if ($guiText9cb -match 'check_sicher_kenn' -and $guiText9cb -match 'SicherKennMuster' -and $guiText9cb -match 'Sicherheitsupdate') {
+            Melde 'ok' "Fenster: das Suchmuster kommt aus der Sprachtabelle des Kerns, der Lauf zaehlt mit und sagt die Zahl"
+        } else { Schlecht "Fenster: Suchmuster nicht mehr an des Kerns Konstante gebunden oder Kennzeichnung wird nicht gezaehlt" }
     }
 }
 

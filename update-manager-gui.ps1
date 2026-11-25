@@ -86,6 +86,22 @@ $Kern         = Join-Path $SkriptOrdner 'universal-update-manager.ps1'
 $ExePfad      = (Get-Process -Id $PID).Path
 $LogPfad      = Join-Path $env:ProgramData 'UpdateManager\universal-update-manager.log'
 
+# Marker des Kerns: Das Fenster zaehlt die Zeilen, die der Kern mit
+# [Sicherheitsrelevant] schreibt, und zeigt die Zahl in der Ergebniskarte.
+# Damit Fensterzaehlung und Protokoll-Warnung des Kerns nicht auseinander-
+# laufen, kommt das Suchmuster aus der Sprachtabelle des Kerns selbst
+# ($T['check_sicher_kenn'], Deutsch wie Englisch) und steht hier nicht als
+# Kopie. Ohne Lesetreffer wird nichts gezaehlt — die Karte sagt dann auch
+# nichts, statt eine erfundene Zahl zu zeigen.
+try {
+    $kernTabelle = Get-Content -LiteralPath $Kern -Raw -ErrorAction Stop
+    $kenn = @([regex]::Matches($kernTabelle, '(?m)"check_sicher_kenn"\s*=\s*"\[([^\]]+)\]"') |
+        ForEach-Object { [regex]::Escape($_.Groups[1].Value) } | Select-Object -Unique)
+    $SicherKennMuster = if ($kenn.Count -gt 0) { '^\s*\[(' + ($kenn -join '|') + ')\]' } else { $null }
+} catch {
+    $SicherKennMuster = $null
+}
+
 # Selbst-Update (SELBST-UPDATE.md): eigene Datei, nur Funktionen. Fehlt sie
 # oder laesst sie sich nicht laden, bleibt das Fenster ohne diese Zeile, es
 # geht nichts anderes kaputt.
@@ -657,6 +673,13 @@ foreach ($name in @('TxtHardware','TxtLetzterLauf','LinkMelucio','ChkWinget','Ch
 function Schreibe {
     param([string]$Zeile)
     if ($Zeile -match '^(Aktualisiert|Updated):.*\((\d+) [^)]*\)\s*$') { $script:LaufAnzahl += [int]$Matches[2] }
+    # Security-relevant marker of the core, see $SicherKennMuster above: the
+    # pattern is built from the core's own language table, not copied here,
+    # so the window count and the core's protocol warning stay together.
+    if ($SicherKennMuster -and $Zeile -match $SicherKennMuster) {
+        $sicherVar = Get-Variable -Name SicherZahl -Scope Script -ErrorAction SilentlyContinue
+        if ($sicherVar) { $sicherVar.Value += 1 }
+    }
     $E.TxtProtokoll.AppendText("`r`n$Zeile")
     $E.ScrollProtokoll.ScrollToEnd()
     # Live-Fenster: nur die letzten LIVE_ZEILEN, leere Zeilen zaehlen nicht.
@@ -678,6 +701,7 @@ function Setze-Beschaeftigt {
     if ($Ja) {
         $Live.Clear(); $E.TxtLive.Text = ''
         $script:LaufAnzahl = 0
+        $script:SicherZahl = 0
         # Das Live-Fenster gehoert zu den Details: nur zeigen, wenn die offen sind.
         $E.LiveRahmen.Visibility = if (Details-Offen) { 'Visible' } else { 'Collapsed' }
         Zeige-Ergebnis -Zahl ([string][char]0x2026) -Satz 'Läuft …' -Zeit 'Das dauert einige Minuten.' -Ton 'neutral'
@@ -883,8 +907,19 @@ function Bilde-Abschluss {
 
     if ($ExitCode -eq 0) {
         if ($Art -eq 'pruefen') {
-            return @{ Gut = $true; Status = 'Nachgesehen. Es wurde nichts verändert.'
-                      Protokoll = 'Nachgesehen. Es wurde nichts veraendert.' }
+            # A count > 0 lands in this card even though the run changed
+            # nothing. Get-Variable, not a direct read: the probe calls
+            # Bilde-Abschluss in isolation, under StrictMode.
+            $sicherVar = Get-Variable -Name SicherZahl -Scope Script -ErrorAction SilentlyContinue
+            $sicher = if ($sicherVar) { [int]$sicherVar.Value } else { 0 }
+            $status = if ($sicher -gt 0) {
+                if ($sicher -eq 1) { 'Nachgesehen. Nichts verändert; 1 Sicherheitsupdate offen.' }
+                else { "Nachgesehen. Nichts verändert; $sicher Sicherheitsupdates offen." }
+            } else {
+                'Nachgesehen. Es wurde nichts verändert.'
+            }
+            return @{ Gut = $true; Status = $status
+                      Protokoll = $status }
         }
         return @{ Gut = $true; Status = "Fertig nach $Minuten Minuten."
                   Protokoll = "Fertig nach $Minuten Minuten. Einzelheiten im Protokoll." }
@@ -1135,6 +1170,7 @@ function Zeige-Aufgabe {
 #  Ergebniskarte (Standardansicht) und Protokoll-Ansicht
 # ---------------------------------------------------------------------------
 $script:LaufAnzahl = 0
+$script:SicherZahl = 0
 $script:AnsichtModus = 'verlauf'
 $script:FilterFehler = $false
 
@@ -1215,7 +1251,14 @@ function Zeige-LaufErgebnis {
     param($Schluss, [string]$Art, [int]$Anzahl, [double]$Minuten)
     if ($Schluss.Gut) {
         if ($Art -eq 'pruefen') {
-            Zeige-Ergebnis -Zahl ([string][char]0x2713) -Satz 'Nachgesehen. Es wurde nichts verändert.' -Ton 'gut'
+            # A green check can hide urgency: security updates are pending,
+            # even though the run changed nothing. A count above zero is a
+            # warning, not a success. Get-Variable, not a direct read: the
+            # probe calls Zeige-LaufErgebnis in isolation, under StrictMode.
+            $sicherVar = Get-Variable -Name SicherZahl -Scope Script -ErrorAction SilentlyContinue
+            $sicher = if ($sicherVar) { [int]$sicherVar.Value } else { 0 }
+            Zeige-Ergebnis -Zahl ([string][char]0x2713) -Satz $Schluss.Status `
+                -Ton $(if ($sicher -gt 0) { 'warn' } else { 'gut' })
         } elseif ($Anzahl -gt 0) {
             $satz = if ($Anzahl -eq 1) { 'Es gab 1 Update, erfolgreich installiert.' } else { "Es gab $Anzahl Updates, alle erfolgreich installiert." }
             Zeige-Ergebnis -Zahl "$Anzahl" -Satz $satz -Zeit "Fertig nach $Minuten Minuten." -Ton 'gut'
