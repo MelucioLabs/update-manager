@@ -93,7 +93,7 @@ $Global:SkriptBeginn = Get-Date
 # (.github/workflows/release.yml) bricht ab, wenn der Tag v<Version> nicht zu
 # BEIDEN Konstanten passt; das Setup bekommt sie von dort. Grundlage fuer das
 # spaetere Selbst-Update (SELBST-UPDATE.md).
-$UpdaterVersion = '3.3.1'
+$UpdaterVersion = '3.3.2'
 
 # ============================================
 # ENCODING
