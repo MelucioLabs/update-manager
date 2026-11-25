@@ -390,6 +390,75 @@ if (Test-Path $Gui) {
     }
 }
 
+# ── 5b. Fenster-Darstellung: Knöpfe lesbar, Fokus, Touch ────────────────────
+# Davids Befund (25.11.2026): Die Knöpfe oben wirkten wie Text, nicht wie
+# Fläche. Hier wird geprüft, was der Screenshot nicht zeigen kann: dass JEDE
+# Knopfsorte einen sichtbaren Rand, einen Hover-Zustand und einen
+# Tastaturfokus-Zustand in der eigenen Vorlage trägt, dass der primäre Knopf
+# seine eigene Sorte behält und dass die Farb-Platzhalter des XAML alle
+# versorgt sind.
+if (Test-Path $Gui) {
+    $guiText5b = Get-Content $Gui -Raw
+
+    # Jede eigene Knopfvorlage zeichnet nach: Hover UND Tastaturfokus UND
+    # Rand. Faellt eine Sorte hinterher, liest sie wieder wie Fliesstext.
+    $fokus = ([regex]::Matches($guiText5b, 'IsKeyboardFocused')).Count
+    $hover = ([regex]::Matches($guiText5b, 'IsMouseOver')).Count
+    $vorlagen = @('x:Key="KnopfLeise"', 'x:Key="KnopfStark"', 'x:Key="Kachel"', 'x:Key="Schalter"') |
+        Where-Object { $guiText5b -notmatch [regex]::Escape($_) }
+    if ($vorlagen) {
+        Schlecht "Knopfsorte(n) fehlen im Fenster: $($vorlagen -join ', ')"
+    } elseif ($fokus -ge 4 -and $hover -ge 4) {
+        Melde 'ok' "alle vier Knopfsorten haben Beruehrungszustand und Tastaturfokus ($hover Hover-, $fokus Fokus-Anzeigen)"
+    } else {
+        Schlecht "Zustandsanzeige duenn: $hover Hover- und $fokus Fokus-Anzeigen (je 4 noetig)"
+    }
+
+    # Knöpfe mit Rand: die leisen Knoepfe tragen RandStark, nicht mehr die
+    # randlose Flaeche, die wie Text las.
+    if ($guiText5b -match 'x:Key="KnopfLeise"(?s).{0,600}RandStark' -and $guiText5b -match 'x:Key="RandStark"') {
+        Melde 'ok' "leise Knoepfe tragen einen sichtbaren Rand (RandStark)"
+    } else {
+        Schlecht "leise Knoepfe haben keinen sichtbaren Rand mehr (RandStark fehlt in der Vorlage)"
+    }
+
+    # Der primaere Knopf: eigene Sorte, damit 'Aktualisieren' von selbst
+    # das Auge faengt.
+    if ($guiText5b -match '(?s)x:Name="BtnStart.{0,200}KnopfStark') {
+        Melde 'ok' "'Aktualisieren' ist der eine hervorgehobene Knopf (KnopfStark)"
+    } else {
+        Schlecht "'Aktualisieren' traegt nicht mehr die hervorgehobene Sorte (KnopfStark)"
+    }
+
+    # Touch: Knopfflaechen mindestens 44 px.
+    if ($guiText5b -match '(?s)x:Key="KnopfLeise".{0,800}Property="MinHeight" Value="44"' -and
+        $guiText5b -match '(?s)x:Key="KnopfLeise".{0,800}Property="MinWidth" Value="44"') {
+        Melde 'ok' "Knoepfe kommen auf mindestens 44 px Kantenlaenge (Touch)"
+    } else {
+        Schlecht "Touch-Groesse fehlt: MinHeight/MinWidth 44 nicht mehr in der Knopfvorlage"
+    }
+
+    # Farben nur ueber die Palette: Im XAML-Block steht kein harter Hex-Wert
+    # (der Tausch '__TASTE__' -> Farbe passiert nur an EINEM Ort).
+    $anfang = $guiText5b.IndexOf("`$xamlText = @'")
+    $ende   = if ($anfang -ge 0) { $guiText5b.IndexOf("'@", $anfang) } else { -2 }
+    if ($anfang -lt 0 -or $ende -lt 0) {
+        Schlecht "XAML-Block nicht auffindbar — Aufbau der Fensterbeschreibung geaendert?"
+    } elseif ($guiText5b.Substring($anfang, $ende - $anfang) -match 'Color="#"') {
+        Schlecht "im XAML steht ein harter Hex-Wert — Farben gehoeren in die Palette"
+    } else {
+        Melde 'ok' "Farben laufen nur durch die Palette (kein Hex-Wert im XAML)"
+    }
+
+    # Neue Platzhalter-Tasten der Palette sind versorgt (hell UND dunkel),
+    # sonst faengt der Lauf mit 'Farbe ohne Wert' an.
+    foreach ($taste in @('RANDSTARK', 'AKZENTKNOPFP')) {
+        $anzahl = ([regex]::Matches($guiText5b, "(?m)\b$taste\s*=\s*'#FF")).Count
+        if ($anzahl -ge 2) { Melde 'ok' "Palette: $taste ist fuers helle und dunkle Aussehen hinterlegt" }
+        else { Schlecht "Palette: $taste steht nur $anzahl-mal (hell und dunkel noetig)" }
+    }
+}
+
 # ── 6. Verhalten: die drei Ausgaenge eines Jobs ─────────────────────────────
 #
 # Die einzige Stelle im Manager, die wirklich LAEUFT statt gelesen zu werden.

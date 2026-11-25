@@ -168,7 +168,9 @@ $xamlText = @'
         Title="Universal Update Manager" Height="800" Width="820" MinHeight="640" MinWidth="720"
         WindowStartupLocation="CenterScreen" Background="__GRUND__">
   <Window.Resources>
-    <!-- Farben an einer Stelle, damit eine Umfaerbung eine Zeile ist -->
+    <!-- Farben an einer Stelle, damit eine Umfaerbung eine Zeile ist;
+         hier stehen ALLE Hex-Werte des Fensters, der Rest des XAML liest
+         nur noch Ressourcen (das Gegenstueck zu CSS Custom Properties). -->
     <!-- Die Hausmarke von MelucioLabs ist LILA (Davids Klarstellung
          21.09.2026). In melucio-theme.css steht das als Accent-Token
          (#7C6AF5, hell #A99EF8); das Gruen daneben heisst dort zwar
@@ -179,16 +181,22 @@ $xamlText = @'
          Die Werte selbst stehen NICHT mehr hier, sondern als Platzhalter:
          Welche Palette eingesetzt wird, entscheidet weiter unten die
          Windows-Einstellung "App-Modus". Siehe den Block "Hell oder
-         dunkel". -->
+         dunkel". NEU im GUI-Neubau: Rand und AkzentKnopfP kommen
+         ebenfalls aus melucio-theme.css, naemlich aus dem Rand-Token
+         (border) und aus dem dunkleren Akzent-Token (accent-dark),
+         jeweils die Werte der hellen und der dunklen Palette. -->
     <SolidColorBrush x:Key="Akzent"       Color="__AKZENT__"/>
     <SolidColorBrush x:Key="AkzentText"   Color="__AKZENTTEXT__"/>
     <SolidColorBrush x:Key="AkzentKnopf"  Color="__AKZENTKNOPF__"/>
     <SolidColorBrush x:Key="AkzentKnopfH" Color="__AKZENTKNOPFH__"/>
+    <SolidColorBrush x:Key="AkzentKnopfP" Color="__AKZENTKNOPFP__"/>
     <SolidColorBrush x:Key="Schrift"      Color="__SCHRIFT__"/>
     <SolidColorBrush x:Key="SchriftLei"   Color="__SCHRIFTLEI__"/>
     <SolidColorBrush x:Key="Karte"        Color="__KARTE__"/>
     <SolidColorBrush x:Key="Tief"         Color="__TIEF__"/>
     <SolidColorBrush x:Key="Bahn"         Color="__BAHN__"/>
+    <SolidColorBrush x:Key="Rand"         Color="__RAND__"/>
+    <SolidColorBrush x:Key="RandStark"    Color="__RANDSTARK__"/>
     <SolidColorBrush x:Key="Gut"          Color="__GUT__"/>
     <SolidColorBrush x:Key="Schlecht"     Color="__SCHLECHT__"/>
     <SolidColorBrush x:Key="Warn"         Color="__WARN__"/>
@@ -205,6 +213,7 @@ $xamlText = @'
       <Setter Property="FontFamily" Value="Segoe UI"/>
       <Setter Property="FontSize" Value="14"/>
       <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="CheckBox">
@@ -232,6 +241,11 @@ $xamlText = @'
                 <Setter TargetName="Bahn" Property="BorderBrush" Value="{StaticResource AkzentText}"/>
                 <Setter TargetName="Bahn" Property="BorderThickness" Value="1"/>
               </Trigger>
+              <!-- Tastaturfokus bekommt denselben Ring wie der Beruehrungszustand. -->
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Bahn" Property="BorderBrush" Value="{StaticResource AkzentText}"/>
+                <Setter TargetName="Bahn" Property="BorderThickness" Value="1"/>
+              </Trigger>
               <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Opacity" Value="0.65"/>
               </Trigger>
@@ -241,26 +255,46 @@ $xamlText = @'
       </Setter>
     </Style>
 
-    <!-- Knoepfe: abgerundet, deutliche Flaeche, 44px Mindesthoehe -->
+    <!-- Knoepfe: abgerundet, deutliche Flaeche, 44px Mindesthoehe und
+         -breite (Touch-Regel). Jede Sorte traegt einen sichtbaren Rand,
+         hellt sich bei Beruehrung auf und zeigt beim Tastaturfokus einen
+         Fokus-Ring in der Akzentfarbe — ein Knopf, der wie Fliesstext
+         aussieht, wird nicht als Knopf gelesen (Davids Befund 25.11.). -->
     <Style x:Key="KnopfLeise" TargetType="Button">
       <Setter Property="FontFamily" Value="Segoe UI"/>
       <Setter Property="FontSize" Value="14"/>
       <Setter Property="Foreground" Value="{StaticResource Schrift}"/>
       <Setter Property="Background" Value="__KNOPF__"/>
-      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="BorderBrush" Value="{StaticResource RandStark}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="MinWidth" Value="44"/>
+      <Setter Property="MinHeight" Value="44"/>
       <Setter Property="Margin" Value="8,0,0,0"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="MinHeight" Value="44"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
             <Border x:Name="Flaeche" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
                     CornerRadius="8" Padding="20,10">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
                 <Setter TargetName="Flaeche" Property="Background" Value="__KNOPFHOVER__"/>
+                <Setter TargetName="Flaeche" Property="BorderBrush" Value="{StaticResource AkzentText}"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Flaeche" Property="BorderBrush" Value="{StaticResource AkzentText}"/>
+                <Setter TargetName="Flaeche" Property="BorderThickness" Value="2"/>
+              </Trigger>
+              <!-- Tastaturfokus: eigener Ring, weil die Standard-Fokuslinie
+                   in einer eigenen Vorlage nicht sichtbar ist. -->
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Flaeche" Property="BorderBrush" Value="{StaticResource AkzentText}"/>
+                <Setter TargetName="Flaeche" Property="BorderThickness" Value="2"/>
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Opacity" Value="0.65"/>
@@ -271,20 +305,34 @@ $xamlText = @'
       </Setter>
     </Style>
 
+    <!-- Der primaere Knopf ("Aktualisieren", ganz rechts in der Reihe): die
+         einzige gefuellte Flaeche in der Reihe, damit von selbst das Auge
+         dort landet. -->
     <Style x:Key="KnopfStark" TargetType="Button" BasedOn="{StaticResource KnopfLeise}">
       <Setter Property="Background" Value="{StaticResource AkzentKnopf}"/>
       <Setter Property="Foreground" Value="White"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="BorderBrush" Value="{StaticResource AkzentText}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
             <Border x:Name="Flaeche" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
                     CornerRadius="8" Padding="24,10">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
                 <Setter TargetName="Flaeche" Property="Background" Value="{StaticResource AkzentKnopfH}"/>
+                <Setter TargetName="Flaeche" Property="BorderBrush" Value="{StaticResource AkzentKnopfH}"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Flaeche" Property="Background" Value="{StaticResource AkzentKnopfP}"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Flaeche" Property="BorderBrush" Value="{StaticResource AkzentText}"/>
+                <Setter TargetName="Flaeche" Property="BorderThickness" Value="2"/>
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Opacity" Value="0.65"/>
@@ -309,21 +357,28 @@ $xamlText = @'
     </Style>
 
     <!-- Kleine Karte, die sich anklicken laesst. Tastaturfokus: Rahmen in der
-         Akzentfarbe (die Standard-Fokuslinie fehlt in einer eigenen Vorlage). -->
+         Akzentfarbe (die Standard-Fokuslinie fehlt in einer eigenen Vorlage).
+         Bei Beruehrung zusaetzlich ein Rand, damit die Kachel nicht nur
+         heller, sondern klar als Angriffsflaeche lesbar ist. -->
     <Style x:Key="Kachel" TargetType="Button">
       <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="MinWidth" Value="44"/>
       <Setter Property="MinHeight" Value="96"/>
       <Setter Property="Background" Value="{StaticResource Karte}"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
             <Border x:Name="Flaeche" Background="{TemplateBinding Background}" BorderBrush="Transparent"
-                    BorderThickness="2" CornerRadius="10" Padding="14,12">
+                    BorderThickness="2" CornerRadius="12" Padding="14,12">
               <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Top"/>
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
                 <Setter TargetName="Flaeche" Property="Background" Value="__KNOPFHOVER__"/>
+                <Setter TargetName="Flaeche" Property="BorderBrush" Value="{StaticResource RandStark}"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Flaeche" Property="BorderBrush" Value="{StaticResource AkzentText}"/>
               </Trigger>
               <Trigger Property="IsKeyboardFocused" Value="True">
                 <Setter TargetName="Flaeche" Property="BorderBrush" Value="{StaticResource AkzentText}"/>
@@ -400,9 +455,10 @@ $xamlText = @'
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
       </Grid.ColumnDefinitions>
-      <Border x:Name="KarteErgebnis" Grid.Column="0" Background="{StaticResource Karte}" CornerRadius="10" Margin="0,0,10,0" MinHeight="96">
+      <Border x:Name="KarteErgebnis" Grid.Column="0" Background="{StaticResource Karte}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
+              CornerRadius="12" Margin="0,0,10,0" MinHeight="96">
         <Grid>
-          <Border x:Name="StreifenErgebnis" Width="5" HorizontalAlignment="Left" CornerRadius="10,0,0,10"
+          <Border x:Name="StreifenErgebnis" Width="5" HorizontalAlignment="Left" CornerRadius="11,0,0,11"
                   Background="{StaticResource SchriftLei}"/>
           <StackPanel Margin="18,12,12,12">
             <TextBlock x:Name="TxtIconErgebnis" Style="{StaticResource Symbol}" Text="&#xE895;"/>
@@ -446,7 +502,8 @@ $xamlText = @'
     <!-- Die Schalter stehen vorbelegt auf "alles" und sind selten anzufassen:
          zu, bis jemand sie sucht. -->
     <StackPanel x:Name="PanelEinstellungen" Visibility="Collapsed" Margin="0,0,0,12">
-    <Border Background="{StaticResource Karte}" CornerRadius="10" Padding="20,14" Margin="0,8,0,0">
+    <Border Background="{StaticResource Karte}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
+            CornerRadius="12" Padding="20,14" Margin="0,8,0,0">
       <StackPanel>
         <TextBlock Text="Was soll geprüft werden?" FontSize="14" FontWeight="SemiBold"
                    Foreground="{StaticResource SchriftLei}" Margin="0,0,0,4"/>
@@ -470,8 +527,9 @@ $xamlText = @'
           <TextBlock Text="Nächtlich um" FontSize="14" VerticalAlignment="Center" Foreground="{StaticResource Schrift}"/>
           <TextBox x:Name="TxtZeit" Text="04:00" Width="72" Margin="10,0,0,0" MinHeight="36"
                    FontSize="14" MaxLength="5" TextAlignment="Center"
-                   VerticalContentAlignment="Center" BorderThickness="0"
-                   Background="{StaticResource Tief}" Foreground="{StaticResource Schrift}"
+                   VerticalContentAlignment="Center" BorderThickness="1"
+                   BorderBrush="{StaticResource RandStark}"
+                   Background="{StaticResource Karte}" Foreground="{StaticResource Schrift}"
                    CaretBrush="{StaticResource Schrift}" Padding="6,4"/>
           <TextBlock Text="Uhr" FontSize="14" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Schrift}"/>
           <Button x:Name="BtnZeit" Style="{StaticResource KnopfLeise}"
@@ -523,7 +581,8 @@ $xamlText = @'
           </StackPanel>
         </Button>
         </WrapPanel>
-        <Border x:Name="PanelVerlauf" Grid.Row="1" Background="{StaticResource Tief}" CornerRadius="10" Padding="4" MinHeight="120">
+        <Border x:Name="PanelVerlauf" Grid.Row="1" Background="{StaticResource Tief}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
+                CornerRadius="12" Padding="4" MinHeight="120">
           <ScrollViewer x:Name="ScrollProtokoll" VerticalScrollBarVisibility="Auto">
             <TextBox x:Name="TxtProtokoll" Background="Transparent" Foreground="__PROTOKOLL__"
                      BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12"
@@ -531,7 +590,8 @@ $xamlText = @'
                      Text="Bereit. Nichts wird verändert, bevor eine Schaltfläche gedrückt wird."/>
           </ScrollViewer>
         </Border>
-        <Border x:Name="PanelProtokoll" Grid.Row="1" Background="{StaticResource Tief}" CornerRadius="10" Padding="4"
+        <Border x:Name="PanelProtokoll" Grid.Row="1" Background="{StaticResource Tief}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
+                CornerRadius="12" Padding="4"
                 MinHeight="120" Visibility="Collapsed">
           <RichTextBox x:Name="RtfProtokoll" Background="Transparent" Foreground="__PROTOKOLL__"
                        BorderThickness="0" IsReadOnly="True" FontFamily="Segoe UI" FontSize="13"
@@ -549,7 +609,8 @@ $xamlText = @'
          unten, aeltere rutschen hoch. Nur waehrend eines Laufs sichtbar. Das
          grosse Feld darueber behaelt den vollen Verlauf. -->
     <Border x:Name="LiveRahmen" Grid.Row="4" Visibility="Collapsed" Background="{StaticResource Tief}"
-            CornerRadius="10" Padding="4" Height="196" Margin="0,10,0,0">
+            BorderBrush="{StaticResource Rand}" BorderThickness="1"
+            CornerRadius="12" Padding="4" Height="196" Margin="0,10,0,0">
       <TextBlock x:Name="TxtLive" Foreground="__PROTOKOLL__" FontFamily="Cascadia Mono, Consolas"
                  FontSize="12" LineHeight="17" LineStackingStrategy="BlockLineHeight"
                  TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Padding="12,8"
@@ -628,17 +689,30 @@ $Palette = if ($AppsHell) {
     @{ GRUND = '#FFFAFAFC'; KARTE = '#FFFFFFFF'; TIEF = '#FFF1F1F4'
        SCHRIFT = '#FF17171B'; SCHRIFTLEI = '#FF5A5A66'; PROTOKOLL = '#FF2A2A33'
        AKZENT = '#FF7C6AF5'; AKZENTTEXT = '#FF5B47D6'
-       AKZENTKNOPF = '#FF5B47D6'; AKZENTKNOPFH = '#FF4C3AC0'
+       AKZENTKNOPF = '#FF5B47D6'; AKZENTKNOPFH = '#FF4C3AC0'; AKZENTKNOPFP = '#FF4E40B8'
        BAHN = '#FF7A7A8E'; KNAUF = '#FFFFFFFF'; KNOPF = '#FFE8E8EE'; KNOPFHOVER = '#FFDCDCE6'
+       RAND = '#FFDDDDDD'; RANDSTARK = '#FF666666'
        GUT = '#FF166534'; SCHLECHT = '#FFB91C1C'; WARN = '#FF92400E' }
 } else {
     @{ GRUND = '#FF17171B'; KARTE = '#FF22222A'; TIEF = '#FF101014'
        SCHRIFT = '#FFF2F2F5'; SCHRIFTLEI = '#FF9A9AA8'; PROTOKOLL = '#FFC8C8D2'
        AKZENT = '#FF7C6AF5'; AKZENTTEXT = '#FFA99EF8'
-       AKZENTKNOPF = '#FF5B47D6'; AKZENTKNOPFH = '#FF6F5BE4'
+       AKZENTKNOPF = '#FF5B47D6'; AKZENTKNOPFH = '#FF6F5BE4'; AKZENTKNOPFP = '#FF6355D0'
        BAHN = '#FF5A5A6C'; KNAUF = '#FFE6E6EC'; KNOPF = '#FF2E2E38'; KNOPFHOVER = '#FF3A3A46'
+       RAND = '#FF3D3D5C'; RANDSTARK = '#FFA8A8B8'
        GUT = '#FF4ADE80'; SCHLECHT = '#FFF87171'; WARN = '#FFFBBF24' }
 }
+# Neuerungen im GUI-Neubau, jede mit ihrer Herkunft aus melucio-theme.css:
+#   AKZENTKNOPFP  Druckzustand des primaeren Knopfs: dort --accent-dark
+#                 (dunkles Theme #6355D0, helles Theme #4E40B8)
+#   RAND          Ränder der Karten: dort --border
+#                 (dunkles Theme #3D3D5C, helles Theme #DDDDDD)
+#   RANDSTARK     Rand der Knoepfe und des Zeit-Felds: dort --text-muted.
+#                 Gemessen statt gefuehlt: Die Flaeche der leisen Knoepfe
+#                 hat gegen den Fenstergrund nur 1,2:1 (hell) bis 1,3:1
+#                 (dunkel) — unter der Nichttext-Schwelle 3:1. Der Rand in
+#                 RandStark misst 5,4:1 (hell) und 7,6:1 (dunkel) gegen den
+#                 Grund und macht die Knopfgrenze wieder lesbar.
 foreach ($schluessel in $Palette.Keys) {
     $xamlText = $xamlText.Replace("__${schluessel}__", $Palette[$schluessel])
 }
