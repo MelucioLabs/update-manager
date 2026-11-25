@@ -21,6 +21,16 @@ unsigniertes oder fremd signiertes Setup, auch nicht nach Bestätigung.
 Der stille Lauf der Aufgabenplanung aktualisiert sich nicht selbst (siehe unten)
 und fragt auch nicht nach.
 
+Beide Schalter sind im Fenster einstellbar (seit dem Umbau „Einstellungen und
+Sprache“, 25.11.2026): Die Karte „Selbst-Update“ in den Einstellungen trägt
+den Regler für `pruefen` (an/aus, gespeichert in update-config.local.json)
+und den klaren Hinweis, dass „installieren“ ohne Signatur ausgeschaltet
+bleibt; einen Regler dafür gibt es dort nicht, solange die Signatur fehlt.
+Das Ergebnis der Tagesprüfung steht als Statuszeile im Kopf des Fensters,
+auch wenn keine neue Fassung gefunden wurde: zuletzt geprüft, ob aktuell,
+und dass nichts von selbst installiert wird. `installieren` wird vom Fenster
+nie geschrieben.
+
 Umgesetzt abweichend vom ersten Entwurf: Der Ablauf läuft in einem eigenen Faden
 (Fenster steht nicht), die Datei bleibt bis zum Ende des Setups mit gesperrtem
 Schreibzugriff geöffnet (kein Austausch zwischen Prüfen und Starten), geladen

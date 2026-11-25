@@ -30,6 +30,13 @@
 param(
     [switch]$SilentMode,
 
+    # Sprache der Ausgabe, 'de' oder 'en'. Leer heisst: die Windows-Formatsprache
+    # (Get-Culture) entscheidet wie bisher. Der Fuehrer des Fensters uebergibt
+    # hier immer seine gewaehlte Sprache, damit Fenster und Ausgabe buchstaben-
+    # gleich bleiben (auch: englisches Windows, deutsches Datumsformat).
+    [ValidateSet('', 'de', 'en')]
+    [string]$Sprache = '',
+
     # Ein einzelner Auftrag ohne Menue und ohne Tastendruck. Dafuer da, dass
     # die Oberflaeche (update-manager-gui.ps1) dieselbe Arbeit anstossen kann
     # wie das Menue, statt sie ein zweites Mal zu beschreiben. Jede zweite
@@ -99,7 +106,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 # SPRACHE / LANGUAGE
 # ============================================
 
-$UILang = (Get-Culture).TwoLetterISOLanguageName
+$UILang = if ($Sprache) { $Sprache } else { (Get-Culture).TwoLetterISOLanguageName }
 
 $T = @{}
 

@@ -9,6 +9,10 @@
     "installieren": false,
     "comment": "pruefen: Das Fenster fragt hoechstens einmal am Tag bei GitHub (api.github.com, nur dieses Repo) nach der neuesten Fassung und zeigt einen Hinweis; geladen wird dabei nichts. installieren: schaltet den Knopf 'Neue Version installieren' frei. Vorgabe AUS, solange das Setup nicht signiert ist (SELBST-UPDATE.md). Eigene Werte gehoeren in update-config.local.json."
   },
+  "gui": {
+    "sprache": "de",
+    "comment": "Oberflaechensprache des Fensters: de oder en, Vorgabe de. Das Fenster schreibt die gewaehlte Sprache nach update-config.local.json (diese Datei bleibt unangetastet)."
+  },
   "benachrichtigung": {
     "enabled": false,
     "url": "",

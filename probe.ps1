@@ -32,6 +32,13 @@
       7. Letzter Lauf — die Zeile im Fenster liest das Richtige.
       8. Meldung   — schweigt, wo sie soll, und klagt, wo etwas fehlt.
       9. Konfig    — update-config.json ist lesbar und hat ihre Abschnitte.
+     14. Einstellungen — Seed-Vorgaben, Speicher-Roundtrip der Regler
+                     (Sprache, Pruefung, Quellen) und die Statuszeile der
+                     Selbst-Update-Pruefung in beide Sprachen.
+     4b. Fenstertexte — gui-sprache.ps1: beide Tabellen voll und stimmig
+                     (wie Punkt 4, nur fuer die Oberflaeche); dazu baut
+                     Punkt 5 das Fenster in de UND en und liest je eine
+                     Stichprobe am Knopf und in der Bereit-Zeile.
 
     Seit dem 03.10.2026 dazu, jeweils in beide Richtungen (greift, wenn es
     soll; schweigt, wenn nicht) und immer gegen Attrappen:
@@ -63,10 +70,19 @@ $ErrorActionPreference = 'Stop'
 $Ordner = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Kern   = Join-Path $Ordner 'universal-update-manager.ps1'
 $Gui    = Join-Path $Ordner 'update-manager-gui.ps1'
+$Sprach = Join-Path $Ordner 'gui-sprache.ps1'
 $Konfig = Join-Path $Ordner 'update-config.json'
 
 $Fehler = New-Object System.Collections.Generic.List[string]
 $Zeilen = New-Object System.Collections.Generic.List[string]
+
+# Das Sprachmodul der Oberflaeche ist rein (nur Definitionen). Es wird hier
+# geladen, weil die Probe einzelne Fenster-Funktionen AUS dem Fenster-Quelltext
+# extrahiert und allein ablaesst — die lesen jetzt $T (Sprachtabellen), und
+# ohne Beisetzung wuerde der Extrakt unter StrictMode sofort fallen. Deutsch
+# reicht: Es ist die Vorgabe, und die Pruefung der Tabellen selbst macht
+# Punkt 4b (und Sektion 14 fuer die Statuszeile in beiden Sprachen).
+if (Test-Path $Sprach) { . $Sprach; $T = Get-GuiSprachTabelle -Code 'de' }
 
 function Melde($zeichen, $text) {
     $Zeilen.Add("$zeichen $text")
@@ -82,7 +98,7 @@ Write-Host "Bausteinprobe Update-Manager" -ForegroundColor Cyan
 Write-Host "----------------------------" -ForegroundColor Cyan
 
 # ── 1. Syntax ───────────────────────────────────────────────────────────────
-foreach ($datei in @($Kern, $Gui)) {
+foreach ($datei in @($Kern, $Gui, $Sprach)) {
     $name = Split-Path -Leaf $datei
     if (-not (Test-Path $datei)) { Schlecht "$name fehlt"; continue }
     $fehlerliste = $null
@@ -102,7 +118,7 @@ foreach ($datei in @($Kern, $Gui)) {
 # es trotzdem, weil dieser Ordner auch ausserhalb des Repos weitergegeben
 # wird — dort gibt es keinen Hook, und ohne BOM bricht als Erstes die
 # Oberflaeche.
-foreach ($datei in @($Kern, $Gui)) {
+foreach ($datei in @($Kern, $Gui, $Sprach)) {
     $name = Split-Path -Leaf $datei
     if (-not (Test-Path $datei)) { continue }
     $kopf = [System.IO.File]::ReadAllBytes($datei) | Select-Object -First 3
@@ -218,7 +234,7 @@ if ((Test-Path $Kern) -and (Test-Path $Gui)) {
         $probeOrdner = Join-Path ([System.IO.Path]::GetTempPath()) ("um probe's {0}" -f [guid]::NewGuid().ToString('N').Substring(0, 8))
         New-Item -ItemType Directory -Path $probeOrdner -Force | Out-Null
         $attrappe = Join-Path $probeOrdner 'kern-attrappe.ps1'
-        $inhalt = "param([string]`$Auftrag)`n$fnSplit`n" +
+        $inhalt = "param([string]`$Auftrag, [string]`$Sprache)`n$fnSplit`n" +
                   "Write-Output ('NAMEN=' + ((Split-Auftrag `$Auftrag) -join '|'))`n"
         [System.IO.File]::WriteAllText($attrappe, $inhalt, (New-Object System.Text.UTF8Encoding $true))
         try {
@@ -288,7 +304,7 @@ if ((Test-Path $Kern) -and (Test-Path $Gui)) {
         $ordner2 = Join-Path ([System.IO.Path]::GetTempPath()) ("um-exit-{0}" -f [guid]::NewGuid().ToString('N').Substring(0, 8))
         New-Item -ItemType Directory -Path $ordner2 -Force | Out-Null
         $attrappe2 = Join-Path $ordner2 'kern-attrappe.ps1'
-        $inhalt2 = "param([string]`$Auftrag)`n" +
+        $inhalt2 = "param([string]`$Auftrag, [string]`$Sprache)`n" +
                    "if (`$Auftrag -match 'choco') { exit 5 }`n" +
                    "if (`$Auftrag -match 'store') { throw 'absichtlich kaputt' }`n" +
                    "exit 0`n"
@@ -363,6 +379,57 @@ if (Test-Path $Kern) {
     }
 }
 
+# ── 4b. Sprachschluessel der Oberflaeche (gui-sprache.ps1) ──────────────────
+# Wie Punkt 4, nur fuer das Fenster: Jeder benutzte Schluessel ($T['…'],
+# Get-GuiSprachText '…', __T_…__ im XAML) muss in BEIDEN Tabellen des Moduls
+# stehen, mit nicht leerem Wortlaut und gleicher Platzhalterzahl ({0}, {1}).
+if ((Test-Path $Gui) -and (Test-Path $Sprach)) {
+    $guiT4b = Get-Content $Gui -Raw
+    $modT4b = Get-Content $Sprach -Raw
+
+    $benutzt4b = @{}
+    foreach ($m in [regex]::Matches($guiT4b, "\`$T\['([a-z][a-z0-9_]*)'\]")) { $benutzt4b[$m.Groups[1].Value] = $true }
+    foreach ($m in [regex]::Matches($modT4b, "(?<=Get-GuiSprachText )'([a-z][a-z0-9_]*)'")) { $benutzt4b[$m.Groups[1].Value] = $true }
+    foreach ($m in [regex]::Matches($guiT4b, "__T_([a-z][a-z0-9_]*)__")) { $benutzt4b[$m.Groups[1].Value] = $true }
+
+    # check_sicher_kenn kommt aus der Tabelle des Kerns (Konvention im GUI,
+    # siehe Kommentar dort) und gehoert nicht in die GUI-Tabellen.
+    $benutzt4b.Remove('check_sicher_kenn') | Out-Null
+
+    function Hole-Tabelle4b([string]$Text, [string]$Name) {
+        $m = [regex]::Match($Text, "(?s)GuiTabelle$Name = @\{(.*?)\r?\n\}")
+        if (-not $m.Success) { return $null }
+        $h = @{}
+        foreach ($p in [regex]::Matches($m.Groups[1].Value, '(?m)"([a-z][a-z0-9_]*)"\s*=\s*"([^"]*)"')) {
+            $h[$p.Groups[1].Value] = $p.Groups[2].Value
+        }
+        return $h
+    }
+    $tab4bDe = Hole-Tabelle4b $modT4b 'De'
+    $tab4bEn = Hole-Tabelle4b $modT4b 'En'
+    if (-not $tab4bDe -or -not $tab4bEn) {
+        Schlecht 'Sprachtabellen im Modul nicht auffindbar (gui-sprache.ps1 umgebaut?)'
+    } else {
+        $fehlt4b = @()
+        foreach ($s in $benutzt4b.Keys) {
+            $deDa = $tab4bDe.ContainsKey($s) -and $tab4bDe[$s]
+            $enDa = $tab4bEn.ContainsKey($s) -and $tab4bEn[$s]
+            if (-not ($deDa -and $enDa)) { $fehlt4b += $s; continue }
+            # Platzhalter wie {0} muessen in beiden Sprachen gleich oft stehen,
+            # sonst frisst -f den einen Satz und den anderen nicht.
+            $anzDe = ([regex]::Matches($tab4bDe[$s], '\{\d\}')).Count
+            $anzEn = ([regex]::Matches($tab4bEn[$s], '\{\d\}')).Count
+            if ($anzDe -ne $anzEn) { $fehlt4b += "$s (Platzhalter $anzDe gegen $anzEn)" }
+        }
+        if ($fehlt4b) { Schlecht "Fenster: $($fehlt4b.Count) Textschluessel unvollstaendig: $($fehlt4b -join ', ')" }
+        else { Melde 'ok' "alle $($benutzt4b.Count) Fenstertextschluessel stehen in beiden Sprachtabellen (gui-sprache.ps1)" }
+
+        # Ungenutzte Schluessel: Ballast faellt beim naechsten Umbau auf.
+        $leer4b = @($tab4bDe.Keys + $tab4bEn.Keys | Select-Object -Unique | Where-Object { -not $benutzt4b.ContainsKey($_) })
+        if ($leer4b) { Schlecht "Fenster: ungenutzte Textschluessel: $($leer4b -join ', ')" }
+    }
+}
+
 # ── 5. Das Fenster baut sich auf, hell wie dunkel ───────────────────────────
 # Der Blindtest der Oberflaeche (`-NurPruefen`) oeffnet nichts und braucht
 # seit dem 22.09.2026 keine erhoehte Sitzung mehr — vorher stand `#Requires
@@ -387,6 +454,29 @@ if (Test-Path $Gui) {
         Melde 'ok' "Nachladen kommt im Fenster an ($(($st | Select-Object -First 1)))"
     } else {
         Schlecht "Nachladen kommt nicht an: $($st -join ' / ')"
+    }
+
+    # Beide Sprachen (Davids Wunsch, 25.11.2026): Das Fenster baut sich auch
+    # auf Englisch, und die Stichprobe liest die Two-Texte am sichtbarsten
+    # Ort: der Primaer-Knopf und die Bereit-Zeile. Das linke Feld nach dem
+    # Auffangnetz steht: Ein fehlender Schluessel wuerde hier als Wortlaut
+    # "__T_...__" oder als Abbruch erscheinen.
+    $startDe = & (Get-Process -Id $PID).Path -NoProfile -File $Gui -NurPruefen -Sprache de 2>&1
+    $startEn = & (Get-Process -Id $PID).Path -NoProfile -File $Gui -NurPruefen -Sprache en 2>&1
+    $knopfDe = ($startDe | Where-Object { "$_" -like 'Knopf: *' }) -join ''
+    $knopfEn = ($startEn | Where-Object { "$_" -like 'Knopf: *' }) -join ''
+    if ($LASTEXITCODE -eq 0 -and $knopfDe -match 'Aktualisieren' -and $knopfDe -notmatch '__T_') {
+        Melde 'ok' "Fenster auf Deutsch: $knopfDe"
+    } else {
+        Schlecht "Fenster deutsch nicht sauber aufgebaut: $knopfDe"
+    }
+    if ($knopfEn -match 'Update' -and $knopfEn -notmatch 'Aktualisieren' -and $knopfEn -notmatch '__T_') {
+        Melde 'ok' "Fenster auf Englisch: $knopfEn"
+    } else {
+        Schlecht "Fenster englisch nicht sauber aufgebaut: $knopfEn"
+    }
+    if ("$knopfDe" -eq "$knopfEn") {
+        Schlecht 'Sprachumschaltung zeigt keinerlei Wirkung (beide Stichproben gleich)'
     }
 }
 
@@ -966,7 +1056,10 @@ if (Test-Path $Kern) {
         # Sprachtabelle des Kerns (Konstante check_sicher_kenn). Steht der
         # Marker nur noch im Fenster, laufen Fensterzaehlung und Protokoll-
         # Warnung auseinander, sobald einer von beiden sich aendert.
-        if ($guiText9cb -match 'check_sicher_kenn' -and $guiText9cb -match 'SicherKennMuster' -and $guiText9cb -match 'Sicherheitsupdate') {
+        # Das Wort "Sicherheitsupdate" steht seit dem Sprach-Umbau in der
+        # Tabelle des Moduls (gui-sprache.ps1), nicht mehr fest im Fenster.
+        if ($guiText9cb -match 'check_sicher_kenn' -and $guiText9cb -match 'SicherKennMuster' -and
+            ($guiText9cb -match 'Sicherheitsupdate' -or ((Test-Path $Sprach) -and ((Get-Content $Sprach -Raw) -match 'Sicherheitsupdate')))) {
             Melde 'ok' "Fenster: das Suchmuster kommt aus der Sprachtabelle des Kerns, der Lauf zaehlt mit und sagt die Zahl"
         } else { Schlecht "Fenster: Suchmuster nicht mehr an des Kerns Konstante gebunden oder Kennzeichnung wird nicht gezaehlt" }
     }
@@ -1562,6 +1655,123 @@ if (-not (Test-Path $Konfig)) {
     } catch {
         Schlecht "update-config.json laesst sich nicht lesen: $($_.Exception.Message)"
     }
+}
+
+# ── 14. Einstellungen: Regler, Speicher-Roundtrip, Statuszeile ──────────────
+# Davids Auftrag (25.11.2026): die Regler der Oberflaeche muessen gesetzte
+# Werte behalten (Vorgaben im Seed, eigene Werte in der lokalen Datei) und
+# die Statuszeile der Selbst-Update-Pruefung muss in beiden Sprachen dasselbe
+# sagen. Alles gegen Temp-Ordner, nichts an der echten Konfiguration. Das
+# Modul ist rein (nur Definitionen) und darf direkt hier geladen werden.
+if (Test-Path $Sprach) {
+    . $Sprach
+
+    if (Test-Path $Konfig) {
+        # (a) Seed-Defaults: Deutsch, Pruefung als Schaltwert, alle Quellen
+        #     erfasst, und installieren bleibt AUS (CODE-SIGNING-POLICY.md).
+        try {
+            $seed14 = Get-Content $Konfig -Raw | ConvertFrom-Json
+            $sprache14 = $seed14.PSObject.Properties['gui']
+            if ($sprache14 -and $sprache14.Value -and "$($sprache14.Value.sprache)" -eq 'de') {
+                Melde 'ok' 'update-config.json: Vorgabe der Sprache ist de'
+            } else { Schlecht 'update-config.json: gui.sprache fehlt oder ist nicht de' }
+            $p14 = $seed14.PSObject.Properties['selbstUpdate']
+            if ($p14 -and $p14.Value.PSObject.Properties['pruefen'] -and $p14.Value.pruefen -is [bool]) {
+                Melde 'ok' 'update-config.json: selbstUpdate.pruefen liegt als Schaltwert vor'
+            } else { Schlecht 'update-config.json: selbstUpdate.pruefen fehlt oder ist kein Schaltwert' }
+            if ($p14 -and $p14.Value.PSObject.Properties['installieren'] -and $p14.Value.installieren -eq $true) {
+                Schlecht 'update-config.json: installieren steht auf true — ohne Signatur verboten (CODE-SIGNING-POLICY.md)'
+            } else {
+                Melde 'ok' 'update-config.json: installieren bleibt aus (kein Auto-Install ohne Signatur)'
+            }
+            $ohneQuelle = @('winget', 'chocolatey', 'windowsUpdate', 'microsoftStore') | Where-Object {
+                $q = $seed14.updateSources.PSObject.Properties[$_]
+                -not ($q -and $q.Value -and $q.Value.PSObject.Properties['enabled'] -and $q.Value.enabled -is [bool])
+            }
+            if ($ohneQuelle) { Schlecht "update-config.json: updateSources ohne enabled-Schalter: $($ohneQuelle -join ', ')" }
+            else { Melde 'ok' 'update-config.json: alle vier Quellen tragen enabled' }
+        } catch {
+            Schlecht "update-config.json (Seed) unlesbar: $($_.Exception.Message)"
+        }
+    }
+
+    # (b) Speicher-Roundtrip: schreiben, neu lesen, gleiche Werte; und die
+    #     mitgelieferte Datei (Seed) bleibt bytegleich unangetastet.
+    $probe14 = Join-Path ([System.IO.Path]::GetTempPath()) ("um-einst-{0}" -f [guid]::NewGuid().ToString('N').Substring(0, 8))
+    try {
+        New-Item -ItemType Directory -Path $probe14 -Force | Out-Null
+        $basis14 = Join-Path $probe14 'update-config.json'
+        [IO.File]::WriteAllText($basis14, '{"gui":{"sprache":"de"},"updateSources":{"winget":{"enabled":true,"timeoutSeconds":1800}}}', (New-Object System.Text.UTF8Encoding $true))
+        $quellen14 = @{ winget = $false; chocolatey = $true; windowsUpdate = $true; microsoftStore = $false; treiber = $false }
+        $schrieb14 = Schreibe-GuiKonfig -Ordner $probe14 -Sprache 'en' -Pruefung:$false -Quellen $quellen14
+        if (-not $schrieb14) { Schlecht 'Schreibe-GuiKonfig meldet Fehlschlag beim ersten Schreiben' }
+        else {
+            $runde14 = Lies-GuiKonfig -Ordner $probe14
+            $stimmt14 = ($runde14.Sprache -eq 'en') -and (-not $runde14.Pruefung) -and
+                        (-not $runde14.Quellen['winget']) -and $runde14.Quellen['chocolatey'] -and
+                        (-not $runde14.Quellen['treiber'])
+            if ($stimmt14) { Melde 'ok' 'Speicher-Roundtrip: Sprache, Pruefung und Quellen-Regler behalten ihre Werte' }
+            else { Schlecht "Speicher-Roundtrip falsch: Sprache=$($runde14.Sprache) Pruefung=$($runde14.Pruefung) winget=$($runde14.Quellen['winget']) treiber=$($runde14.Quellen['treiber'])" }
+
+            $basis14Neu = [IO.File]::ReadAllText($basis14)
+            if ($basis14Neu -match '"timeoutSeconds"\s*:\s*1800' -and $basis14Neu -match '"sprache"\s*:\s*"de"') {
+                Melde 'ok' 'update-config.json (Seed) blieb beim Schreiben unangetastet'
+            } else {
+                Schlecht 'update-config.json wurde beim Speichern angefasst — eigene Werte gehoeren nur in die lokale Datei'
+            }
+        }
+
+        # Datei unlesbar: nichts schreiben, sauberer Fehlschlag statt
+        # stiller Zerstoerung der lokalen Einstellungen.
+        Set-Content -LiteralPath (Join-Path $probe14 'update-config.local.json') -Value '{kaputt' -Encoding UTF8
+        if (Schreibe-GuiKonfig -Ordner $probe14 -Sprache 'en' -Pruefung:$true -Quellen @{}) {
+            Schlecht 'Schreibe-GuiKonfig schrieb in eine beschaedigte lokale Datei statt zu verweigern'
+        } else {
+            Melde 'ok' 'beschaedigte update-config.local.json: Schreiben wird verweigert, nichts ueberschrieben'
+        }
+    } finally {
+        Remove-Item -LiteralPath $probe14 -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    # (c) Statuszeile der Selbst-Update-Pruefung: beide Sprachen, alle Faelle.
+    $rein14 = [datetime]::UtcNow.ToString('o')
+    $zustand14 = [pscustomobject]@{ geprueft = $rein14 }
+    $zeitpunkt14 = Get-SelbstUpdateZeitpunkt -Zustand $zustand14
+    if ($zeitpunkt14) {
+        Melde 'ok' "Statuszeile: Zeitpunkt der letzten Pruefung laesst sich lesen ($zeitpunkt14)"
+    } else {
+        Schlecht 'Statuszeile: Zeitpunkt der letzten Pruefung nicht lesbar'
+    }
+    $soll14 = @(
+        @{ Pruefen = $true;  Zeitpunkt = $zeitpunkt14; Neu = $false; Schluessel = 'self_zeile_aktuell_format' }
+        @{ Pruefen = $true;  Zeitpunkt = '';            Neu = $false; Schluessel = 'self_zeile_erreicht_nicht' }
+        @{ Pruefen = $false; Zeitpunkt = $zeitpunkt14; Neu = $false; Schluessel = 'self_zeile_aus' }
+    )
+    foreach ($fall14 in $soll14) {
+        foreach ($code14 in 'de', 'en') {
+            $text14 = Text-SelbstUpdateHinweis -PruefenAn $fall14.Pruefen -Zeitpunkt $fall14.Zeitpunkt -NeueFassung:$fall14.Neu -Version '3.2.0' -Sprache $code14
+            $erwartet14 = (Get-GuiSprachText $fall14.Schluessel $code14)
+            $gefalloren = $false
+            if ($fall14.Schluessel -eq 'self_zeile_aktuell_format') {
+                $erwartet14 = $erwartet14 -f $fall14.Zeitpunkt, '3.2.0'
+            }
+            if ("$text14" -ne "$erwartet14" -or -not $text14) { $gefalloren = $true }
+            if ($gefalloren) {
+                Schlecht "Statuszeile ($code14, $($fall14.Schluessel)): '$text14' statt '$erwartet14'"
+            }
+        }
+    }
+    # Ohne Cutting: die drei Faelle, zwei Sprachen, alles gruen?
+    $statusFaelle = @($soll14 | ForEach-Object { "$($_.Schluessel)" }).Count * 2
+    if (-not ($Fehler | Where-Object { $_ -match 'Statuszeile' })) {
+        Melde 'ok' "Statuszeile in $statusFaelle Faellen (de und en) wie erwartet"
+    }
+    # Mit einer neuen Fassung traetzt die Statuszeile (die Zeile darueber meldet).
+    $leer14 = Text-SelbstUpdateHinweis -PruefenAn $true -Zeitpunkt $zeitpunkt14 -NeueFassung:$true -Version '3.2.0' -Sprache 'de'
+    if ($leer14 -eq '') { Melde 'ok' 'Statuszeile tritt zurueck, solange die Zeile mit der neuen Fassung da ist' }
+    else { Schlecht "Statuszeile bleibt neben der Fassungszeile stehen: '$leer14'" }
+} else {
+    Schlecht 'gui-sprache.ps1 fehlt fuer die Einstellungs-Pruefung (Sektion 14)'
 }
 
 Write-Host ""

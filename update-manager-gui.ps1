@@ -59,7 +59,14 @@ param(
     # Test blind fuer genau den Teil, der zuletzt umgebaut wurde. Oeffnet
     # nichts: Das Fenster bleibt ungezeigt, die Nachrichtenschleife wird von
     # Hand gedreht.
-    [switch]$Selbsttest
+    [switch]$Selbsttest,
+
+    # Sprache der Oberflaeche, de oder en. Leer heisst: aus
+    # update-config.local.json / update-config.json lesen, Standard Deutsch.
+    # Die Probe ruft das Fenster in beiden Sprachen auf; im Fenster selbst
+    # schaltet der Punkt in den Einstellungen um.
+    [ValidateSet('', 'de', 'en')]
+    [string]$Sprache = ''
 )
 
 # ============================================
@@ -120,11 +127,25 @@ if (Test-Path $SelbstUpdateDatei) {
     try { . $SelbstUpdateDatei; $SelbstUpdateGeladen = $true } catch { }
 }
 
-if (-not (Test-Path $Kern)) {
+# Sprache und lokale Einstellungen (gui-sprache.ps1). Ohne das Modul kann das
+# Fenster keine Texte aufbauen: sauber abbrechen statt halb zu rendern.
+$SprachDatei = Join-Path $SkriptOrdner 'gui-sprache.ps1'
+if (-not (Test-Path $SprachDatei)) {
     [System.Windows.MessageBox]::Show(
-        "Das Hauptskript fehlt:`n$Kern", 'Universal Update Manager') | Out-Null
+        "Language module missing: $SprachDatei", 'Universal Update Manager') | Out-Null
     exit 1
 }
+. $SprachDatei
+if (-not (Test-Path $Kern)) {
+    [System.Windows.MessageBox]::Show(($T['kern_fehlt_format'] -f $Kern), 'Universal Update Manager') | Out-Null
+    exit 1
+}
+
+# Reihenfolge: Parameter schlaegt gespeicherte Wahl, gespeicherte Wahl
+# schlaegt Vorgabe Deutsch (die im Seed von update-config.json steht).
+$GuiKonfig = Lies-GuiKonfig -Ordner $SkriptOrdner
+if (-not $Sprache) { $Sprache = $GuiKonfig.Sprache }
+$T = Get-GuiSprachTabelle -Code $Sprache
 
 # ERHOEHUNG ZUR LAUFZEIT PRUEFEN, nicht per `#Requires` (22.09.2026).
 #
@@ -144,10 +165,7 @@ if (-not (Test-Path $Kern)) {
 if (-not $NurPruefen -and -not $Abbild -and -not $Selbsttest) {
     $ich = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
     if (-not $ich.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        [System.Windows.MessageBox]::Show(
-            "Der Update-Manager braucht Administratorrechte.`n`n" +
-            "Am einfachsten über update-manager-gui.bat starten, die fragt die Rechte selbst ab.",
-            'Universal Update Manager') | Out-Null
+        [System.Windows.MessageBox]::Show($T['start_rechte_meldung'], 'Universal Update Manager') | Out-Null
         exit 1
     }
 }
@@ -413,17 +431,24 @@ $xamlText = @'
                      Foreground="{StaticResource AkzentText}" VerticalAlignment="Bottom"/>
           <TextBlock FontSize="12" Foreground="{StaticResource SchriftLei}"
                      Margin="12,0,0,5" VerticalAlignment="Bottom">
-            <Run Text="bereitgestellt von "/><Hyperlink x:Name="LinkMelucio"
+            <Run Text="__T_bereitgestellt_von__"/><Hyperlink x:Name="LinkMelucio"
                  NavigateUri="https://meluciolabs.de"
                  Foreground="{StaticResource AkzentText}">MelucioLabs</Hyperlink>
           </TextBlock>
         </WrapPanel>
-        <TextBlock x:Name="TxtHardware" Text="Hardware wird erkannt …" FontSize="12"
+        <TextBlock x:Name="TxtHardware" Text="__T_hardware_bekannt__" FontSize="12"
                    Foreground="{StaticResource SchriftLei}" Margin="0,5,0,0" TextWrapping="Wrap"/>
         <!-- Der nächtliche Lauf ist sonst unsichtbar: Er läuft ohne Fenster,
              und wer nicht von sich aus das Protokoll öffnet, erfährt nie, ob
              er etwas getan hat oder seit Wochen scheitert. -->
         <TextBlock x:Name="TxtLetzterLauf" Text="" FontSize="12"
+                   Foreground="{StaticResource SchriftLei}" Margin="0,3,0,0" TextWrapping="Wrap"/>
+        <!-- Statuszeile der Selbst-Update-Pruefung (Davids Wunsch, 25.11.2026):
+             Sagt das Ergebnis der Tagespruefung und, dass nichts von selbst
+             installiert wird. Sichtbar ist sie immer, sobald geprueft wurde
+             oder die Pruefung ausgeschaltet ist; zeigt sie die Zeile mit der
+             neuen Fassung, tritt sie zurueck. -->
+        <TextBlock x:Name="TxtSelbstUpdate" Text="" FontSize="12"
                    Foreground="{StaticResource SchriftLei}" Margin="0,3,0,0" TextWrapping="Wrap"/>
         <!-- Neue Fassung (SELBST-UPDATE.md): erst sichtbar, wenn die
              Tagesabfrage eine neuere gefunden hat. Kein Dialog, der sich vor
@@ -434,15 +459,15 @@ $xamlText = @'
                      Margin="0,0,12,0" TextWrapping="Wrap"/>
           <TextBlock FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0">
             <Hyperlink x:Name="LinkNeueFassung" NavigateUri="https://meluciolabs.de/update"
-                       Foreground="{StaticResource AkzentText}">Was ist neu?</Hyperlink>
+                       Foreground="{StaticResource AkzentText}">__T_was_ist_neu__</Hyperlink>
           </TextBlock>
           <TextBlock x:Name="TxtLinkSeite" FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0">
             <Hyperlink x:Name="LinkUpdateSeite" NavigateUri="https://meluciolabs.de/update"
-                       Foreground="{StaticResource AkzentText}">Herunterladen</Hyperlink>
+                       Foreground="{StaticResource AkzentText}">__T_herunterladen__</Hyperlink>
           </TextBlock>
           <Button x:Name="BtnNeueFassung" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0"
-                  Content="Neue Version installieren" Visibility="Collapsed"/>
-          <Button x:Name="BtnFassungSpaeter" Style="{StaticResource KnopfLeise}" Margin="0" Content="Später"/>
+                  Content="__T_neue_fassung_knopf__" Visibility="Collapsed"/>
+          <Button x:Name="BtnFassungSpaeter" Style="{StaticResource KnopfLeise}" Margin="0" Content="__T_spaeter__"/>
         </WrapPanel>
       </StackPanel>
     </StackPanel>
@@ -463,38 +488,38 @@ $xamlText = @'
           <StackPanel Margin="18,12,12,12">
             <TextBlock x:Name="TxtIconErgebnis" Style="{StaticResource Symbol}" Text="&#xE895;"/>
             <TextBlock x:Name="TxtZahl" Text="" FontSize="26" FontWeight="SemiBold" Margin="0,6,0,0"
-                       Foreground="{StaticResource SchriftLei}" AutomationProperties.Name="Anzahl"/>
-            <TextBlock Text="Updates im letzten Lauf" FontSize="12" Foreground="{StaticResource SchriftLei}" TextWrapping="Wrap"/>
+                       Foreground="{StaticResource SchriftLei}" AutomationProperties.Name="__T_ergebnis_zahl__"/>
+            <TextBlock Text="__T_updates_letzter_lauf__" FontSize="12" Foreground="{StaticResource SchriftLei}" TextWrapping="Wrap"/>
           </StackPanel>
         </Grid>
       </Border>
       <Button x:Name="KachelEinstellungen" Grid.Column="1" Style="{StaticResource Kachel}" Margin="0,0,10,0"
-              AutomationProperties.Name="Einstellungen ein- oder ausblenden">
+              AutomationProperties.Name="__T_einstellungen_umschalten__">
         <StackPanel>
           <TextBlock Style="{StaticResource Symbol}" Text="&#xE713;"/>
-          <TextBlock x:Name="TxtKachelEinst" Text="5 von 5" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" Foreground="{StaticResource Schrift}"/>
-          <TextBlock Text="Quellen aktiv" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
+          <TextBlock x:Name="TxtKachelEinst" Text="5" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" Foreground="{StaticResource Schrift}"/>
+          <TextBlock Text="__T_quellen_aktiv__" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
         </StackPanel>
       </Button>
       <Button x:Name="KachelVerlauf" Grid.Column="2" Style="{StaticResource Kachel}" Margin="0,0,10,0"
-              AutomationProperties.Name="Verlauf dieser Sitzung ein- oder ausblenden">
+              AutomationProperties.Name="__T_verlauf_umschalten__">
         <StackPanel>
           <TextBlock Style="{StaticResource Symbol}" Text="&#xE81C;"/>
-          <TextBlock Text="Verlauf" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" Foreground="{StaticResource Schrift}"/>
-          <TextBlock x:Name="TxtKachelVerlauf" Text="dieser Sitzung" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
+          <TextBlock Text="__T_verlauf__" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" Foreground="{StaticResource Schrift}"/>
+          <TextBlock x:Name="TxtKachelVerlauf" Text="__T_dieser_sitzung__" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
         </StackPanel>
       </Button>
       <Button x:Name="KachelProtokolle" Grid.Column="3" Style="{StaticResource Kachel}"
-              AutomationProperties.Name="Protokoll ein- oder ausblenden">
+              AutomationProperties.Name="__T_protokoll_umschalten__">
         <StackPanel>
           <TextBlock Style="{StaticResource Symbol}" Text="&#xE8A5;"/>
-          <TextBlock x:Name="TxtKachelProto" Text="Protokoll" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" Foreground="{StaticResource Schrift}"/>
-          <TextBlock x:Name="TxtKachelProtoZeit" Text="im Protokoll" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
+          <TextBlock x:Name="TxtKachelProto" Text="__T_protokoll__" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" Foreground="{StaticResource Schrift}"/>
+          <TextBlock x:Name="TxtKachelProtoZeit" Text="__T_im_protokoll__" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
         </StackPanel>
       </Button>
     </Grid>
     <StackPanel Margin="2,0,0,14">
-      <TextBlock x:Name="TxtErgebnis" Text="Wird gelesen …" FontSize="16" TextWrapping="Wrap"
+      <TextBlock x:Name="TxtErgebnis" Text="__T_wird_gelesen__" FontSize="16" TextWrapping="Wrap"
                  Foreground="{StaticResource Schrift}"/>
       <TextBlock x:Name="TxtErgebnisZeit" Text="" FontSize="12" Margin="0,3,0,0" TextWrapping="Wrap"
                  Foreground="{StaticResource SchriftLei}"/>
@@ -505,18 +530,20 @@ $xamlText = @'
     <Border Background="{StaticResource Karte}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
             CornerRadius="12" Padding="20,14" Margin="0,8,0,0">
       <StackPanel>
-        <TextBlock Text="Was soll geprüft werden?" FontSize="14" FontWeight="SemiBold"
+        <TextBlock Text="__T_was_pruefen__" FontSize="14" FontWeight="SemiBold"
                    Foreground="{StaticResource SchriftLei}" Margin="0,0,0,4"/>
         <CheckBox x:Name="ChkWinget"  Style="{StaticResource Schalter}" Tag="&#xE8F1;" IsChecked="True"
-                  Content="Winget: Programme aus dem Microsoft-Paketverzeichnis"/>
+                  Content="__T_schalter_winget__"/>
         <CheckBox x:Name="ChkChoco"   Style="{StaticResource Schalter}" Tag="&#xE7B8;" IsChecked="True"
-                  Content="Chocolatey: Programme aus dem Community-Verzeichnis"/>
+                  Content="__T_schalter_choco__"/>
         <CheckBox x:Name="ChkWindows" Style="{StaticResource Schalter}" Tag="&#xE770;" IsChecked="True"
-                  Content="Windows Update: System und Treiber"/>
+                  Content="__T_schalter_windows__"/>
         <CheckBox x:Name="ChkStore"   Style="{StaticResource Schalter}" Tag="&#xE8A1;" IsChecked="True"
-                  Content="Microsoft Store: Apps im Hintergrund anstoßen"/>
+                  Content="__T_schalter_store__"/>
         <CheckBox x:Name="ChkTreiber" Style="{StaticResource Schalter}" Tag="&#xE950;" IsChecked="True"
-                  Content="Hersteller-Werkzeuge: nur erkannte Hardware"/>
+                  Content="__T_schalter_treiber__"/>
+        <TextBlock Text="__T_schalter_dauerhaft__" FontSize="12" Foreground="{StaticResource SchriftLei}"
+                   TextWrapping="Wrap" Margin="0,4,0,0"/>
         <!-- Die nächtliche Uhrzeit gehört hierher und nicht ins alte
              Konsolenmenü: Wer hier steht, will einstellen, was der Manager
              tut — und die Frage "wann von selbst" ist dieselbe Frage wie
@@ -524,24 +551,53 @@ $xamlText = @'
              angefasst wird als die Schalter darüber. -->
         <Border Height="1" Background="{StaticResource Bahn}" Opacity="0.35" Margin="0,14,0,10"/>
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <TextBlock Text="Nächtlich um" FontSize="14" VerticalAlignment="Center" Foreground="{StaticResource Schrift}"/>
+          <TextBlock Text="__T_naechtlich__" FontSize="14" VerticalAlignment="Center" Foreground="{StaticResource Schrift}"/>
           <TextBox x:Name="TxtZeit" Text="04:00" Width="72" Margin="10,0,0,0" MinHeight="36"
                    FontSize="14" MaxLength="5" TextAlignment="Center"
                    VerticalContentAlignment="Center" BorderThickness="1"
                    BorderBrush="{StaticResource RandStark}"
                    Background="{StaticResource Karte}" Foreground="{StaticResource Schrift}"
                    CaretBrush="{StaticResource Schrift}" Padding="6,4"/>
-          <TextBlock Text="Uhr" FontSize="14" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Schrift}"/>
+          <TextBlock Text="__T_uhr__" FontSize="14" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Schrift}"/>
           <Button x:Name="BtnZeit" Style="{StaticResource KnopfLeise}"
                   Margin="14,0,0,0">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE73E;"/>
-            <TextBlock x:Name="TxtBtnZeit" Text="Übernehmen" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+            <TextBlock x:Name="TxtBtnZeit" Text="__T_uebernehmen__" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
           </StackPanel>
         </Button>
         </StackPanel>
         <TextBlock x:Name="TxtAufgabe" Text="" FontSize="12" Margin="0,8,0,0"
                    TextWrapping="Wrap" Foreground="{StaticResource SchriftLei}"/>
+      </StackPanel>
+    </Border>
+
+    <!-- Separater Punkt (Davids Wunsch, 25.11.2026): selbstUpdate.pruefen als
+         eigener Regler, mit der Klarheit, dass nichts von selbst installiert
+         wird. Zweiter Regler derselben Karte: die Sprache der Oberflaeche.
+         Installieren bekommt keinen Regler: ohne Signatur kein Auto-Install
+         (CODE-SIGNING-POLICY.md). -->
+    <Border Background="{StaticResource Karte}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
+            CornerRadius="12" Padding="20,14" Margin="0,12,0,0">
+      <StackPanel>
+        <TextBlock Text="__T_selbst_titel__" FontSize="14" FontWeight="SemiBold"
+                   Foreground="{StaticResource SchriftLei}" Margin="0,0,0,4"/>
+        <CheckBox x:Name="ChkSelbstPruefen" Style="{StaticResource Schalter}" Tag="&#xE895;" IsChecked="True"
+                  Content="__T_schalter_selbst_pruefen__"/>
+        <TextBlock Text="__T_selbst_ohne_signatur__" FontSize="12" Foreground="{StaticResource SchriftLei}"
+                   TextWrapping="Wrap" Margin="0,4,0,0"/>
+        <Border Height="1" Background="{StaticResource Bahn}" Opacity="0.35" Margin="0,14,0,10"/>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <TextBlock Text="__T_sprache_label__" FontSize="14" VerticalAlignment="Center" Foreground="{StaticResource Schrift}"/>
+          <Button x:Name="BtnSpracheDe" Style="{StaticResource KnopfLeise}" Margin="14,0,0,0" VerticalAlignment="Center">
+            <TextBlock Text="Deutsch"/>
+          </Button>
+          <Button x:Name="BtnSpracheEn" Style="{StaticResource KnopfLeise}" Margin="8,0,0,0" VerticalAlignment="Center">
+            <TextBlock Text="English"/>
+          </Button>
+        </StackPanel>
+        <TextBlock Text="__T_sprache_hinweis__" FontSize="12" Foreground="{StaticResource SchriftLei}"
+                   TextWrapping="Wrap" Margin="0,8,0,0"/>
       </StackPanel>
     </Border>
     </StackPanel>
@@ -559,25 +615,25 @@ $xamlText = @'
           <Button x:Name="BtnAnsichtVerlauf" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE81C;"/>
-            <TextBlock x:Name="TxtBtnAnsichtVerlauf" Text="Verlauf" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+            <TextBlock x:Name="TxtBtnAnsichtVerlauf" Text="__T_verlauf__" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
           </StackPanel>
         </Button>
           <Button x:Name="BtnAnsichtProtokoll" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE8A5;"/>
-            <TextBlock x:Name="TxtBtnAnsichtProtokoll" Text="Protokoll" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+            <TextBlock x:Name="TxtBtnAnsichtProtokoll" Text="__T_protokoll__" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
           </StackPanel>
         </Button>
           <Button x:Name="BtnFilterAlles" Style="{StaticResource KnopfLeise}" Margin="16,0,8,0" Visibility="Collapsed">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE8FD;"/>
-            <TextBlock x:Name="TxtBtnFilterAlles" Text="Alles" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+            <TextBlock x:Name="TxtBtnFilterAlles" Text="__T_filter_alles__" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
           </StackPanel>
         </Button>
           <Button x:Name="BtnFilterFehler" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0" Visibility="Collapsed">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE783;"/>
-            <TextBlock x:Name="TxtBtnFilterFehler" Text="Fehler (0)" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+            <TextBlock x:Name="TxtBtnFilterFehler" Text="__T_filter_fehler_format__" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
           </StackPanel>
         </Button>
         </WrapPanel>
@@ -587,7 +643,7 @@ $xamlText = @'
             <TextBox x:Name="TxtProtokoll" Background="Transparent" Foreground="__PROTOKOLL__"
                      BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12"
                      IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" Padding="12,8"
-                     Text="Bereit. Nichts wird verändert, bevor eine Schaltfläche gedrückt wird."/>
+                     Text="__T_protokoll_bereit__"/>
           </ScrollViewer>
         </Border>
         <Border x:Name="PanelProtokoll" Grid.Row="1" Background="{StaticResource Tief}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
@@ -596,7 +652,7 @@ $xamlText = @'
           <RichTextBox x:Name="RtfProtokoll" Background="Transparent" Foreground="__PROTOKOLL__"
                        BorderThickness="0" IsReadOnly="True" FontFamily="Segoe UI" FontSize="13"
                        VerticalScrollBarVisibility="Auto" Padding="8,4"
-                       AutomationProperties.Name="Protokoll"/>
+                       AutomationProperties.Name="__T_protokoll__"/>
         </Border>
       </Grid>
     </Grid>
@@ -614,7 +670,7 @@ $xamlText = @'
       <TextBlock x:Name="TxtLive" Foreground="__PROTOKOLL__" FontFamily="Cascadia Mono, Consolas"
                  FontSize="12" LineHeight="17" LineStackingStrategy="BlockLineHeight"
                  TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Padding="12,8"
-                 AutomationProperties.Name="Live-Ausgabe"/>
+                 AutomationProperties.Name="__T_live_ausgabe__"/>
     </Border>
 
     <Grid Grid.Row="5" Margin="0,16,0,0">
@@ -624,25 +680,25 @@ $xamlText = @'
         <Button x:Name="BtnProtokoll" Style="{StaticResource KnopfLeise}">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE8A5;"/>
-            <TextBlock x:Name="TxtBtnProtokoll" Text="Protokoll" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+            <TextBlock x:Name="TxtBtnProtokoll" Text="__T_protokoll__" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
           </StackPanel>
         </Button>
         <Button x:Name="BtnSchliessen" Style="{StaticResource KnopfLeise}">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE711;"/>
-            <TextBlock x:Name="TxtBtnSchliessen" Text="Schließen" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+            <TextBlock x:Name="TxtBtnSchliessen" Text="__T_schliessen__" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
           </StackPanel>
         </Button>
         <Button x:Name="BtnPruefen" Style="{StaticResource KnopfLeise}">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE7B3;"/>
-            <TextBlock x:Name="TxtBtnPruefen" Text="Nur nachsehen" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+            <TextBlock x:Name="TxtBtnPruefen" Text="__T_nur_nachsehen__" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
           </StackPanel>
         </Button>
         <Button x:Name="BtnStart" Style="{StaticResource KnopfStark}">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE895;"/>
-            <TextBlock x:Name="TxtBtnStart" Text="Aktualisieren" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+            <TextBlock x:Name="TxtBtnStart" Text="__T_aktualisieren__" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
           </StackPanel>
         </Button>
       </StackPanel>
@@ -716,6 +772,19 @@ $Palette = if ($AppsHell) {
 foreach ($schluessel in $Palette.Keys) {
     $xamlText = $xamlText.Replace("__${schluessel}__", $Palette[$schluessel])
 }
+
+# Texte der Oberflaeche aus der Sprachtabelle (gui-sprache.ps1), XML-maskiert
+# eingesetzt, damit ein Anfuehrungszeichen im Text nicht das Attribut sprengt.
+# Danach darf kein Platzhalter mehr uebrig sein: Ein vergessener Schluessel
+# wuerde sonst als Wortlaut "__T_...__" im Fenster stehen.
+foreach ($schluessel in $T.Keys) {
+    $text = [string]$T[$schluessel]
+    $text = $text.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;').Replace('"', '&quot;')
+    $xamlText = $xamlText.Replace("__T_${schluessel}__", $text)
+}
+if ($xamlText -match '__T_[A-Za-z0-9_]+__') {
+    throw "Textschluessel ohne Eintrag in der Sprachtabelle ($Sprache): $($Matches[0])"
+}
 # Ein vergessener Platzhalter faellt sonst erst als XAML-Fehler auf, und der
 # nennt nur eine Zeilennummer.
 if ($xamlText -match '__[A-Z]+__') {
@@ -749,10 +818,22 @@ foreach ($name in @('TxtHardware','TxtLetzterLauf','LinkMelucio','ChkWinget','Ch
                     'TxtIconErgebnis','KachelEinstellungen','KachelVerlauf','KachelProtokolle','TxtKachelEinst','TxtKachelVerlauf',
                     'TxtKachelProto','TxtKachelProtoZeit','TxtBtnFilterFehler',
                     'BtnAnsichtVerlauf','BtnAnsichtProtokoll','BtnFilterAlles','BtnFilterFehler',
-                    'PanelVerlauf','PanelProtokoll','RtfProtokoll')) {
+                    'PanelVerlauf', 'PanelProtokoll', 'RtfProtokoll',
+                    'ChkSelbstPruefen', 'BtnSpracheDe', 'BtnSpracheEn', 'TxtSelbstUpdate', 'TxtBtnStart')) {
     $E[$name] = $fenster.FindName($name)
     if ($null -eq $E[$name]) { throw "Element fehlt im XAML: $name" }
 }
+
+# Gespeicherte Wahl: Quellen-Regler und die Selbst-Update-Pruefung. Es ist
+# nichts ausgeschaltet, was nicht der Nutzer selbst ausgeschaltet hat. Kein
+# Regler fuer "installieren": ohne Signatur kein Auto-Install
+# (CODE-SIGNING-POLICY.md).
+$E.ChkWinget.IsChecked = $GuiKonfig.Quellen['winget']
+$E.ChkChoco.IsChecked = $GuiKonfig.Quellen['chocolatey']
+$E.ChkWindows.IsChecked = $GuiKonfig.Quellen['windowsUpdate']
+$E.ChkStore.IsChecked = $GuiKonfig.Quellen['microsoftStore']
+$E.ChkTreiber.IsChecked = $GuiKonfig.Quellen['treiber']
+$E.ChkSelbstPruefen.IsChecked = $GuiKonfig.Pruefung
 
 # ============================================================================
 #  Hilfsmittel
@@ -792,14 +873,15 @@ function Setze-Beschaeftigt {
         $script:SicherZahl = 0
         # Das Live-Fenster gehoert zu den Details: nur zeigen, wenn die offen sind.
         $E.LiveRahmen.Visibility = if (Details-Offen) { 'Visible' } else { 'Collapsed' }
-        Zeige-Ergebnis -Zahl ([string][char]0x2026) -Satz 'Läuft …' -Zeit 'Das dauert einige Minuten.' -Ton 'neutral'
+        Zeige-Ergebnis -Zahl ([string][char]0x2026) -Satz $T['status_laeuft'] -Zeit $T['status_dauert'] -Ton 'neutral'
     }
     Aktualisiere-Kacheln
     $E.TxtStatus.Text = $Text
     $E.TxtStatus.Foreground = if ($Schlecht) { $fenster.FindResource('Schlecht') }
                               elseif ($Gut)  { $fenster.FindResource('Gut') }
                               else           { $fenster.FindResource('SchriftLei') }
-    foreach ($n in @('BtnStart','BtnPruefen','ChkWinget','ChkChoco','ChkWindows','ChkStore','ChkTreiber')) {
+    foreach ($n in @('BtnStart','BtnPruefen','ChkWinget','ChkChoco','ChkWindows','ChkStore','ChkTreiber',
+                     'ChkSelbstPruefen','BtnSpracheDe','BtnSpracheEn')) {
         $E[$n].IsEnabled = -not $Ja
     }
 }
@@ -858,7 +940,7 @@ function Baue-KernArgumente {
         Auftrag", und das Fenster meldete trotzdem "Fertig". Die Probe
         (probe.ps1) startet genau diese Zeile gegen eine Attrappe.
     #>
-    param([string]$KernPfad, [string[]]$Namen)
+    param([string]$KernPfad, [string[]]$Namen, [string]$Sprache = '')
 
     $vorlauf = '[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; '
     # Ein Hochkomma im Pfad oder Namen wuerde die Zeichenkette beenden.
@@ -872,8 +954,12 @@ function Baue-KernArgumente {
     # Kam das Skript gar nicht bis zu einem `exit` (Datei fehlt, Syntax- oder
     # Parameterfehler), gibt es keinen Code. Das ist dann 1 und nicht 0:
     # Ein Lauf, der nicht stattfand, ist kein gelungener.
+    # -Sprache: Die Ausgabe des Kerns (Section-Header, Meldungen) folgt
+    # derselben Sprache wie das Fenster, nicht der Windows-Anzeigesprache.
+    # Leer (Attrappen-Testlaeufe) faellt der Schalter weg, nicht der Wert.
+    $sprachTeil = if ($Sprache) { " -Sprache $Sprache" } else { '' }
     return '-NoProfile -ExecutionPolicy Bypass -Command "' + $vorlauf +
-           "& '" + $pfad + "' -Auftrag '" + $liste + "'; " +
+           "& '" + $pfad + "'" + $sprachTeil + " -Auftrag '" + $liste + "'; " +
            'if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE' + '"'
 }
 
@@ -885,7 +971,7 @@ function Starte-Kette {
 
     # Hier und nicht im Hintergrund zusammengebaut: Der Runspace unten kennt
     # die Funktionen dieses Skripts nicht, nur die Variablen, die er bekommt.
-    $argumente = Baue-KernArgumente -KernPfad $Kern -Namen @($Auftraege | ForEach-Object { $_.Name })
+    $argumente = Baue-KernArgumente -KernPfad $Kern -Namen @($Auftraege | ForEach-Object { $_.Name }) -Sprache $Sprache
 
     $rs = [runspacefactory]::CreateRunspace()
     $rs.Open()
@@ -1001,27 +1087,27 @@ function Bilde-Abschluss {
             $sicherVar = Get-Variable -Name SicherZahl -Scope Script -ErrorAction SilentlyContinue
             $sicher = if ($sicherVar) { [int]$sicherVar.Value } else { 0 }
             $status = if ($sicher -gt 0) {
-                if ($sicher -eq 1) { 'Nachgesehen. Nichts verändert; 1 Sicherheitsupdate offen.' }
-                else { "Nachgesehen. Nichts verändert; $sicher Sicherheitsupdates offen." }
+                if ($sicher -eq 1) { $T['nachgesehen_sicher_eins'] }
+                else { $T['nachgesehen_sicher_zahl_format'] -f $sicher }
             } else {
-                'Nachgesehen. Es wurde nichts verändert.'
+                $T['nachgesehen_ehrlich']
             }
             return @{ Gut = $true; Status = $status
                       Protokoll = $status }
         }
-        return @{ Gut = $true; Status = "Fertig nach $Minuten Minuten."
-                  Protokoll = "Fertig nach $Minuten Minuten. Einzelheiten im Protokoll." }
+        return @{ Gut = $true; Status = ($T['fertig_minuten_format'] -f $Minuten)
+                  Protokoll = ($T['fertig_protokoll_format'] -f $Minuten) }
     }
 
     $was = switch ($ExitCode) {
-        5       { 'Mit Fehlern beendet' }
-        2       { 'Nicht gestartet: unbekannter Auftrag' }
-        4       { 'Nicht gestartet: Administratorrechte fehlen' }
-        default { "Abgebrochen (Code $ExitCode)" }
+        5       { $T['mit_fehlern_beendet'] }
+        2       { $T['auftrag_unbekannt'] }
+        4       { $T['rechte_fehlen'] }
+        default { ($T['abgebrochen_code_format'] -f $ExitCode) }
     }
-    if ($Art -eq 'pruefen') { $was = "Nachsehen unvollständig. $was" }
-    return @{ Gut = $false; Status = "$was. Einzelheiten im Protokoll."
-              Protokoll = "$was nach $Minuten Minuten (Code $ExitCode). Einzelheiten ueber den Knopf Protokoll." }
+    if ($Art -eq 'pruefen') { $was = ($T['nachsehen_unvollstaendig_format'] -f $was) }
+    return @{ Gut = $false; Status = "$was. $($T['einzelheiten_im_protokoll'])"
+              Protokoll = ($T['abschluss_protokoll_format'] -f $was, $Minuten, $ExitCode) }
 }
 
 function Raeume-Lauf-Auf {
@@ -1068,7 +1154,7 @@ $Takt.Add_Tick({
   } catch {
     # Ein Fehler beim Anzeigen darf den Lauf nicht mitreissen.
     $Takt.Stop()
-    try { $E.TxtStatus.Text = "Anzeige gestört: $($_.Exception.Message)" } catch { }
+    try { $E.TxtStatus.Text = ($T['status_anzeige_gestoert_format'] -f $_.Exception.Message) } catch { }
   }
 })
 
@@ -1089,9 +1175,9 @@ function Fuehre-Sicher-Aus {
         $Takt.Stop()
         Raeume-Lauf-Auf
         Schreibe ''
-        Schreibe "[Fehler] $Was ist fehlgeschlagen: $($_.Exception.Message)"
+        Schreibe ($T['status_fehler_aufruf_format'] -f $Was, $_.Exception.Message)
         if ($_.InvocationInfo) { Schreibe "  $($_.InvocationInfo.PositionMessage.Trim())" }
-        Setze-Beschaeftigt $false "Fehlgeschlagen — Einzelheiten stehen oben."
+        Setze-Beschaeftigt $false $T['status_fehlgeschlagen']
         try { Write-EigenesLog $_ } catch { }
     }
 }
@@ -1110,10 +1196,10 @@ $E.BtnStart.Add_Click({
     Fuehre-Sicher-Aus -Was 'Aktualisieren' -Tun {
         $auftraege = Gewaehlte-Auftraege
         if ($auftraege.Count -eq 0) {
-            $E.TxtStatus.Text = 'Nichts ausgewählt.'
+            $E.TxtStatus.Text = $T['status_nichts_ausgewaehlt']
             return
         }
-        Setze-Beschaeftigt $true 'Läuft …'
+        Setze-Beschaeftigt $true $T['status_laeuft']
         Starte-Kette -Auftraege $auftraege -Art 'alles'
         $Takt.Start()
     }
@@ -1121,7 +1207,7 @@ $E.BtnStart.Add_Click({
 
 $E.BtnPruefen.Add_Click({
     Fuehre-Sicher-Aus -Was 'Nachsehen' -Tun {
-        Setze-Beschaeftigt $true 'Sieht nach …'
+        Setze-Beschaeftigt $true $T['status_sieht_nach']
         Starte-Kette -Auftraege @(@{ Name = 'pruefen'; Titel = 'Was steht an' }) -Art 'pruefen'
         $Takt.Start()
     }
@@ -1133,26 +1219,26 @@ $E.BtnZeit.Add_Click({
     # erst nach dem Start eines Prozesses. Der Kern prueft trotzdem noch
     # einmal: Er wird auch von woanders gerufen.
     if ($zeit -notmatch '^([01]?\d|2[0-3]):([0-5]\d)$') {
-        $E.TxtAufgabe.Text = 'Uhrzeit bitte als HH:MM angeben, zum Beispiel 04:00.'
+        $E.TxtAufgabe.Text = $T['zeit_format_fehler']
         return
     }
-    $E.TxtAufgabe.Text = 'Wird eingerichtet …'
+    $E.TxtAufgabe.Text = $T['zeit_wird_eingerichtet']
     try {
         $roh = & $ExePfad -NoProfile -ExecutionPolicy Bypass -File $Kern -AufgabeZeit $zeit 2>&1
         if ($LASTEXITCODE -ne 0) {
-            $E.TxtAufgabe.Text = "Hat nicht geklappt: $(($roh | Select-Object -Last 1))"
+            $E.TxtAufgabe.Text = ($T['zeit_misslungen_format'] -f ($roh | Select-Object -Last 1))
             return
         }
         # Nicht die eigene Eingabe zurueckspiegeln, sondern neu nachfragen:
         # Angezeigt wird damit, was WIRKLICH eingetragen ist.
         Zeige-Aufgabe (Hole-Aufgabe)
     } catch {
-        $E.TxtAufgabe.Text = "Hat nicht geklappt: $($_.Exception.Message)"
+        $E.TxtAufgabe.Text = ($T['zeit_misslungen_format'] -f $_.Exception.Message)
     }
 })
 
 $E.BtnProtokoll.Add_Click({
-    if (-not (Test-Path $LogPfad)) { $E.TxtStatus.Text = 'Noch kein Protokoll vorhanden.'; return }
+    if (-not (Test-Path $LogPfad)) { $E.TxtStatus.Text = $T['kein_protokoll']; return }
     if ($AnsichtGeladen) {
         # In der App, schoen gesetzt (Davids Wunsch 08.10.2026).
         Zeige-Details $true 'protokoll'
@@ -1176,10 +1262,68 @@ $E.KachelVerlauf.Add_Click({
     if ((Details-Offen) -and $script:AnsichtModus -eq 'verlauf') { Zeige-Details $false } else { Zeige-Details $true 'verlauf' }
 })
 $E.KachelProtokolle.Add_Click({
-    if (-not (Test-Path $LogPfad)) { $E.TxtStatus.Text = 'Noch kein Protokoll vorhanden.'; return }
+    if (-not (Test-Path $LogPfad)) { $E.TxtStatus.Text = $T['kein_protokoll']; return }
     if ((Details-Offen) -and $script:AnsichtModus -eq 'protokoll') { Zeige-Details $false } else { Zeige-Details $true 'protokoll' }
 })
-foreach ($c in @($E.ChkWinget, $E.ChkChoco, $E.ChkWindows, $E.ChkStore, $E.ChkTreiber)) { $c.Add_Click({ Aktualisiere-Kacheln }) }
+foreach ($c in @($E.ChkWinget, $E.ChkChoco, $E.ChkWindows, $E.ChkStore, $E.ChkTreiber)) { $c.Add_Click({ Aktualisiere-Kacheln; Speichere-GuiEinstellungen }) }
+
+# Davids Regler (25.11.2026): selbstUpdate.pruefen an/aus, gespeichert in der
+# Maschinen-Konfiguration. Klarheit statt Annahme: die Statuszeile steht im Kopf.
+$E.ChkSelbstPruefen.Add_Click({
+    Speichere-GuiEinstellungen
+    if (-not $E.ChkSelbstPruefen.IsChecked) {
+        Zeige-SelbstUpdateStatus -Schalter @{ Pruefen = $false } -Zustand $null
+    } else {
+        $script:NeueFassung = $null
+        $E.ZeileNeueFassung.Visibility = 'Collapsed'
+        Pruefe-Neue-Fassung
+    }
+})
+
+function Speichere-GuiEinstellungen {
+    param([string]$SpracheNeu = '')
+    $code = if ($SpracheNeu) { $SpracheNeu } else { $Sprache }
+    $quellen = @{
+        winget         = [bool]$E.ChkWinget.IsChecked
+        chocolatey     = [bool]$E.ChkChoco.IsChecked
+        windowsUpdate  = [bool]$E.ChkWindows.IsChecked
+        microsoftStore = [bool]$E.ChkStore.IsChecked
+        treiber        = [bool]$E.ChkTreiber.IsChecked
+    }
+    return Schreibe-GuiKonfig -Ordner $SkriptOrdner -Sprache $code -Pruefung ([bool]$E.ChkSelbstPruefen.IsChecked) -Quellen $quellen
+}
+
+function Zeige-SelbstUpdateStatus {
+    <# Die Statuszeile der Selbst-Update-Pruefung (Davids Wunsch, 25.11.2026):
+       Sagt das Ergebnis der Tagespruefung und, dass nichts von selbst
+       installiert wird. Zeigt der Kopf schon die Zeile mit der neuen Fassung,
+       tritt sie zurueck. #>
+    param($Schalter, $Zustand)
+    $zeitpunkt = Get-SelbstUpdateZeitpunkt -Zustand $Zustand -Sprache $Sprache
+    $hinweis = Text-SelbstUpdateHinweis -PruefenAn ([bool]$Schalter.Pruefen) -Zeitpunkt $zeitpunkt -NeueFassung ([bool]$script:NeueFassung) -Version $UpdaterVersion -Sprache $Sprache
+    if ($hinweis) {
+        $E.TxtSelbstUpdate.Text = $hinweis
+        $E.TxtSelbstUpdate.Visibility = 'Visible'
+    } else {
+        $E.TxtSelbstUpdate.Visibility = 'Collapsed'
+    }
+}
+
+function Wechsle-GuiSprache {
+    param([string]$Code)
+    if ($Code -eq $Sprache -or $Lauf.kind -gt 0) { return }
+    if (-not (Speichere-GuiEinstellungen -SpracheNeu $Code)) {
+        $E.TxtStatus.Text = $T['sprache_speichern_fehler']
+        return
+    }
+    # Neu bauen heisst hier neu starten (eine Fassung, ein Aufbau; einzelne
+    # Texte zu tauschen vergisst drei von vier Stellen, siehe MEHRSPRACHIG.md).
+    Start-Process -FilePath (Join-Path $SkriptOrdner 'update-manager-gui.bat') -WorkingDirectory $SkriptOrdner
+    $fenster.Close()
+}
+
+$E.BtnSpracheDe.Add_Click({ Wechsle-GuiSprache 'de' })
+$E.BtnSpracheEn.Add_Click({ Wechsle-GuiSprache 'en' })
 
 # Ein Hyperlink in WPF oeffnet von sich aus GAR NICHTS - ohne diesen Handler
 # ist er nur blauer Text. Die Adresse steht fest im Fenster, es kommt nichts
@@ -1246,7 +1390,7 @@ function Hole-Aufgabe {
         Oberflaeche fragt, der Kern weiss.
     #>
     try {
-        $roh = & $ExePfad -NoProfile -ExecutionPolicy Bypass -File $Kern -AufgabeStatus 2>&1
+        $roh = & $ExePfad -NoProfile -ExecutionPolicy Bypass -File $Kern -Sprache $Sprache -AufgabeStatus 2>&1
         $zeile = ($roh | Where-Object { "$_".TrimStart().StartsWith('{') } | Select-Object -Last 1)
         if (-not $zeile) { return $null }
         return $zeile | ConvertFrom-Json
@@ -1257,23 +1401,22 @@ function Zeige-Aufgabe {
     <# Traegt den Zustand in Feld und Zeile ein. #>
     param($a)
     if (-not $a) {
-        $E.TxtAufgabe.Text = 'Der Zustand der Aufgabenplanung ließ sich nicht lesen.'
+        $E.TxtAufgabe.Text = $T['aufgabe_lesen_fehler']
         return
     }
     if (-not $a.eingerichtet) {
         $E.TxtZeit.Text = '04:00'
-        $E.TxtAufgabe.Text = 'Kein nächtlicher Lauf eingerichtet. Uhrzeit setzen und übernehmen.'
+        $E.TxtAufgabe.Text = $T['aufgabe_keine']
         return
     }
     if ($a.zeit) { $E.TxtZeit.Text = $a.zeit }
-    $text = "Nächster Lauf: $($a.naechsterLauf)"
-    if ($a.letzterLauf) { $text += "  ·  zuletzt $($a.letzterLauf)" }
+    $text = ($T['aufgabe_naechster_format'] -f $a.naechsterLauf)
+    if ($a.letzterLauf) { $text += "  ·  " + ($T['aufgabe_zuletzt_format'] -f $a.letzterLauf) }
     if (-not $a.zeigtHierher) {
         # Der wichtigste Fall, deshalb zuerst und im Klartext: Die Aufgabe
         # startet eine ANDERE Datei, der nächtliche Lauf arbeitet also mit
         # einem anderen Stand als dieses Fenster.
-        $text = "Achtung: Der nächtliche Lauf startet eine andere Fassung ($($a.pfad)). " +
-                "Ein Klick auf Übernehmen hängt ihn auf diese hier um.`n" + $text
+        $text = ($T['aufgabe_andere_fassung'] -f $a.pfad) + "`n" + $text
     }
     # Die Vorgabe der Aufgabenplanung ist Priorität 7 (niedrig). Unter Last
     # kommt der Lauf dann zu kurz, und seine Zeitgrenzen reißen (03.10.2026).
@@ -1281,7 +1424,7 @@ function Zeige-Aufgabe {
     # das Feld nicht, und unter StrictMode wirft der direkte Zugriff.
     $prio = $a.PSObject.Properties['prioritaet']
     if ($prio -and $null -ne $prio.Value -and [int]$prio.Value -ge 7) {
-        $text += "`nLäuft mit niedriger Priorität ($($prio.Value)). Ein Klick auf Übernehmen stellt auf normal um."
+        $text += "`n" + ($T['aufgabe_prio_format'] -f $prio.Value)
     }
     $E.TxtAufgabe.Text = $text
 }
@@ -1311,8 +1454,8 @@ function Zeige-Details {
 function Aktualisiere-Kacheln {
     # Zahl der aktiven Quellen und welche Kachel gerade aufgeklappt ist.
     $n = @($E.ChkWinget, $E.ChkChoco, $E.ChkWindows, $E.ChkStore, $E.ChkTreiber | Where-Object { $_.IsChecked }).Count
-    $E.TxtKachelEinst.Text = "$n von 5"
-    $E.TxtKachelVerlauf.Text = if ($E.Fortschritt.IsIndeterminate) { 'läuft gerade' } else { 'dieser Sitzung' }
+    $E.TxtKachelEinst.Text = ($T['aktive_quellen_format'] -f $n)
+    $E.TxtKachelVerlauf.Text = if ($E.Fortschritt.IsIndeterminate) { $T['lief_gerade'] } else { $T['dieser_sitzung'] }
     $rahmen = @{
         KachelEinstellungen = ($E.PanelEinstellungen.Visibility -eq 'Visible')
         KachelVerlauf       = ((Details-Offen) -and $script:AnsichtModus -eq 'verlauf')
@@ -1345,7 +1488,7 @@ function Zeige-LetztenLaufKarte {
     if (-not $AnsichtGeladen) { return }
     try {
         if (-not (Test-Path $LogPfad)) {
-            Zeige-Ergebnis -Zahl ([string][char]0x2013) -Satz 'Noch kein Protokoll vorhanden.' -Ton 'neutral'
+            Zeige-Ergebnis -Zahl ([string][char]0x2013) -Satz $T['kein_protokoll'] -Ton 'neutral'
             return
         }
         $zeilen = Get-Content -Path $LogPfad -Tail 400 -Encoding UTF8 -ErrorAction Stop
@@ -1353,16 +1496,16 @@ function Zeige-LetztenLaufKarte {
         $karte = Bilde-ErgebnisKarte $lauf
         $zeit = ''
         if ($lauf.Gefunden -and $lauf.Wann -match '^(\d{4})-(\d\d)-(\d\d) (\d\d:\d\d)') {
-            $zeit = "Letzter stiller Lauf: $($Matches[3]).$($Matches[2]).$($Matches[1]) um $($Matches[4]) Uhr"
+            $zeit = ($T['letzter_stiller_format'] -f ("$($Matches[3]).$($Matches[2]).$($Matches[1]), $($Matches[4])"))
         }
         Zeige-Ergebnis -Zahl $karte.Zahl -Satz $karte.Satz -Zeit $zeit -Ton $karte.Ton
         $n = Get-LaufAnzahl (ConvertTo-ProtokollEintraege $zeilen)
-        $E.TxtKachelProto.Text = if ($n -eq 1) { '1 Lauf' } else { "$n Läufe" }
-        $E.TxtKachelProtoZeit.Text = if ($lauf.Gefunden -and $lauf.Wann -match '^\d{4}-(\d\d)-(\d\d)') { "zuletzt $($Matches[2]).$($Matches[1])." } else { 'im Protokoll' }
+        $E.TxtKachelProto.Text = if ($n -eq 1) { $T['laeufe_eins'] } else { ($T['laeufe_zahl_format'] -f $n) }
+        $E.TxtKachelProtoZeit.Text = if ($lauf.Gefunden -and $lauf.Wann -match '^\d{4}-(\d\d)-(\d\d)') { ($T['kachel_zeit_format'] -f ("$($Matches[2]).$($Matches[1]).")) } else { 'im Protokoll' }
         # Die Kopfzeile sagt dasselbe: nicht doppelt zeigen.
         $E.TxtLetzterLauf.Visibility = 'Collapsed'
     } catch {
-        Zeige-Ergebnis -Zahl ([string][char]0x2013) -Satz 'Protokoll konnte nicht gelesen werden.' -Ton 'neutral'
+        Zeige-Ergebnis -Zahl ([string][char]0x2013) -Satz $T['protokoll_lesen_fehler'] -Ton 'neutral'
     }
 }
 
@@ -1380,13 +1523,13 @@ function Zeige-LaufErgebnis {
             Zeige-Ergebnis -Zahl ([string][char]0x2713) -Satz $Schluss.Status `
                 -Ton $(if ($sicher -gt 0) { 'warn' } else { 'gut' })
         } elseif ($Anzahl -gt 0) {
-            $satz = if ($Anzahl -eq 1) { 'Es gab 1 Update, erfolgreich installiert.' } else { "Es gab $Anzahl Updates, alle erfolgreich installiert." }
+            $satz = if ($Anzahl -eq 1) { $T['es_gab_eins'] } else { ($T['es_gab_zahl_format'] -f $Anzahl) }
             Zeige-Ergebnis -Zahl "$Anzahl" -Satz $satz -Zeit "Fertig nach $Minuten Minuten." -Ton 'gut'
         } else {
-            Zeige-Ergebnis -Zahl ([string][char]0x2713) -Satz 'Fertig. Nichts war zu aktualisieren oder alles ist durch.' -Zeit "Nach $Minuten Minuten." -Ton 'gut'
+            Zeige-Ergebnis -Zahl ([string][char]0x2713) -Satz $T['fertig_nichts'] -Zeit ($T['nach_minuten_format'] -f $Minuten) -Ton 'gut'
         }
     } else {
-        Zeige-Ergebnis -Zahl '!' -Satz $Schluss.Status -Zeit 'Einzelheiten unter Details.' -Ton 'schlecht'
+        Zeige-Ergebnis -Zahl '!' -Satz $Schluss.Status -Zeit $T['einzelheiten_details'] -Ton 'schlecht'
     }
 }
 
@@ -1417,7 +1560,7 @@ function Markiere-Knopf {
 
 function Zeige-ProtokollAnsicht {
     if (-not $AnsichtGeladen -or -not (Test-Path $LogPfad)) {
-        $E.TxtStatus.Text = 'Noch kein Protokoll vorhanden.'
+        $E.TxtStatus.Text = $T['kein_protokoll']
         return
     }
     try {
@@ -1441,7 +1584,7 @@ function Zeige-ProtokollAnsicht {
                 ($fenster.FindResource('Schlecht')).Color.G, ($fenster.FindResource('Schlecht')).Color.B))
         if (@($tage).Count -eq 0) {
             $p = New-Object System.Windows.Documents.Paragraph
-            $r = New-Object System.Windows.Documents.Run($(if ($script:FilterFehler) { 'Keine Fehler im Protokoll.' } else { 'Das Protokoll ist leer.' }))
+            $r = New-Object System.Windows.Documents.Run($(if ($script:FilterFehler) { $T['keine_fehler_protokoll'] } else { $T['protokoll_leer'] }))
             $r.Foreground = $lei; [void]$p.Inlines.Add($r); [void]$doc.Blocks.Add($p)
         }
         foreach ($tag in $tage) {
@@ -1470,7 +1613,7 @@ function Zeige-ProtokollAnsicht {
         }
         $E.RtfProtokoll.Document = $doc
     } catch {
-        $E.TxtStatus.Text = "Protokoll konnte nicht angezeigt werden: $($_.Exception.Message)"
+        $E.TxtStatus.Text = ($T['protokoll_anzeige_fehler_format'] -f $_.Exception.Message)
     }
 }
 
@@ -1489,16 +1632,16 @@ function Lies-LetztenLauf {
     #>
     param([string]$Pfad)
     try {
-        if (-not (Test-Path $Pfad)) { return 'Noch kein Protokoll vorhanden.' }
+        if (-not (Test-Path $Pfad)) { return $T['kein_protokoll'] }
         $zeilen = Get-Content -Path $Pfad -Tail 400 -ErrorAction Stop
         # Auch der GESCHEITERTE Lauf zaehlt als letzter Lauf (03.10.2026): Er
         # schreibt [SILENT-FAILED] statt [SILENT-DONE]. Suchte die Zeile nur
         # nach dem gelungenen, stuende hier nach einer schlechten Nacht der
         # gute Lauf von vorgestern.
         $fertig = $zeilen | Where-Object { $_ -match '\[SILENT-(DONE|FAILED)\]' } | Select-Object -Last 1
-        if (-not $fertig) { return 'Noch kein stiller Lauf im Protokoll.' }
+        if (-not $fertig) { return $T['noch_kein_stiller'] }
         $gescheitert = $fertig -match '\[SILENT-FAILED\]'
-        $wann = if ($fertig -match '^\[([\d\-]+) ([\d:]+)\]') { "$($Matches[1]) um $($Matches[2])" } else { 'unbekannt' }
+        $wann = if ($fertig -match '^\[([\d\-]+) ([\d:]+)\]') { "$($Matches[1]) um $($Matches[2])" } else { $T['unbekannt'] }
 
         # Fehler NUR aus dem letzten Lauf, nicht aus der ganzen Datei: Ein
         # Fehler von vor drei Wochen ist keine Aussage ueber heute.
@@ -1507,14 +1650,14 @@ function Lies-LetztenLauf {
         $fehler = @($abschnitt | Where-Object { $_ -match '\[ERROR\]' }).Count
         $getan  = @($abschnitt | Where-Object { $_ -match 'Aktualisiert:' }) | Select-Object -Last 1
 
-        $text = "Letzter stiller Lauf: $wann"
-        if ($getan -match 'Aktualisiert:\s*(.+)$') { $text += " — $($Matches[1])" }
-        elseif (-not $gescheitert -and ($abschnitt -match 'Keine Updates')) { $text += ' — nichts offen' }
-        if ($gescheitert) { $text += ' — gescheitert, wird nachgeholt' }
-        if ($fehler -gt 0) { $text += "  ·  $fehler Fehler im Protokoll" }
+        $text = ($T['letzter_stiller_format'] -f $wann)
+        if ($getan -match 'Aktualisiert:\s*(.+)$') { $text += ", " + $Matches[1] }
+        elseif (-not $gescheitert -and ($abschnitt -match 'Keine Updates')) { $text += ", " + $T['nichts_offen'] }
+        if ($gescheitert) { $text += ", " + $T['gescheitert_vermerk'] }
+        if ($fehler -gt 0) { $text += "  ·  " + ($T['fehler_im_protokoll_format'] -f $fehler) }
         return $text
     } catch {
-        return 'Protokoll konnte nicht gelesen werden.'
+        return $T['protokoll_lesen_fehler']
     }
 }
 
@@ -1532,12 +1675,13 @@ function Lies-LetztenLauf {
 # Auf ein WPF-Element darf nur sein eigener Faden schreiben.
 function Lade-Nebenher {
     $E.TxtLetzterLauf.Text = Lies-LetztenLauf $LogPfad   # liest nur Dateiende, schnell
-    $E.TxtAufgabe.Text = 'Aufgabenplanung wird gelesen …'
+    $E.TxtAufgabe.Text = $T['aufgabe_bekannt']
 
     $rs = [runspacefactory]::CreateRunspace()
     $rs.Open()
     $rs.SessionStateProxy.SetVariable('Kern', $Kern)
     $rs.SessionStateProxy.SetVariable('ExePfad', $ExePfad)
+    $rs.SessionStateProxy.SetVariable('HardwareFehler', $T['hardware_fehler'])
     $ps = [PowerShell]::Create()
     $ps.Runspace = $rs
     [void]$ps.AddScript({
@@ -1546,10 +1690,10 @@ function Lade-Nebenher {
             $gpu   = (Get-CimInstance Win32_VideoController | Select-Object -First 1).Name
             $board = (Get-CimInstance Win32_BaseBoard).Manufacturer
             "$cpu  ·  $gpu  ·  $board"
-        } catch { 'Hardware konnte nicht gelesen werden.' }
+        } catch { $HardwareFehler }
 
         $aufgabe = try {
-            $roh = & $ExePfad -NoProfile -ExecutionPolicy Bypass -File $Kern -AufgabeStatus 2>&1
+            $roh = & $ExePfad -NoProfile -ExecutionPolicy Bypass -File $Kern -Sprache $Sprache -AufgabeStatus 2>&1
             ($roh | Where-Object { "$_".TrimStart().StartsWith('{') } | Select-Object -Last 1)
         } catch { $null }
 
@@ -1573,7 +1717,7 @@ function Lade-Nebenher {
                 Zeige-Aufgabe $a
             }
         } catch {
-            $E.TxtHardware.Text = 'Hardware konnte nicht gelesen werden.'
+            $E.TxtHardware.Text = $T['hardware_fehler']
         } finally {
             $ps.Dispose(); $rs.Dispose()
         }
@@ -1593,11 +1737,12 @@ function Zeige-NeueFassung {
     $aus = if ($zustand -and $zustand.PSObject.Properties['ausgeblendet']) { "$($zustand.ausgeblendet)" } else { '' }
     if ($aus -and $aus -eq $Fassung.Tag) { return }     # "Später" gilt für diese Fassung
     $script:NeueFassung = $Fassung
-    $E.TxtNeueFassung.Text = "Version $($Fassung.Version) ist verfügbar."
+    $E.TxtNeueFassung.Text = ($T['fassung_verfuegbar_format'] -f $Fassung.Version)
     $E.LinkNeueFassung.NavigateUri = [uri]$Fassung.Notizen
     $E.BtnNeueFassung.Visibility = if ($Schalter.Installieren) { 'Visible' } else { 'Collapsed' }
     $E.TxtLinkSeite.Visibility   = if ($Schalter.Installieren) { 'Collapsed' } else { 'Visible' }
     $E.ZeileNeueFassung.Visibility = 'Visible'
+    $E.TxtSelbstUpdate.Visibility = 'Collapsed'
 }
 
 # Hoechstens einmal am Tag bei GitHub fragen; sonst den gemerkten Stand zeigen.
@@ -1606,11 +1751,15 @@ function Zeige-NeueFassung {
 function Pruefe-Neue-Fassung {
     if (-not $SelbstUpdateGeladen) { return }
     $schalter = Lies-SelbstUpdateSchalter $SkriptOrdner
-    if (-not $schalter.Pruefen) { return }
+    if (-not $schalter.Pruefen) {
+        Zeige-SelbstUpdateStatus -Schalter $schalter -Zustand $zustand
+        return
+    }
     $zustand = Lies-SelbstUpdateZustand $SelbstUpdateZustand
     if (Test-HeuteSchonGefragt $zustand) {
         $f = Lies-GemerkteFassung $zustand
         if ($f -and (Test-FassungNeuer $f.Tag $UpdaterVersion)) { Zeige-NeueFassung $f $schalter }
+        else { Zeige-SelbstUpdateStatus -Schalter $schalter -Zustand $zustand }
         return
     }
     $rs = [runspacefactory]::CreateRunspace()
@@ -1640,6 +1789,7 @@ function Pruefe-Neue-Fassung {
             $merker = if ($f) { $f } else { Lies-GemerkteFassung $alt }
             Schreibe-SelbstUpdateZustand $SelbstUpdateZustand $merker $aus
             if ($f) { Zeige-NeueFassung $f $schalter }
+            else { Zeige-SelbstUpdateStatus -Schalter $schalter -Zustand (Lies-SelbstUpdateZustand $SelbstUpdateZustand) }
         } catch { } finally { $ps.Dispose(); $rs.Dispose() }
     }.GetNewClosure())
     $warten.Start()
@@ -1673,14 +1823,14 @@ $E.BtnNeueFassung.Add_Click({
     $signiert = [bool]$script:SU_SignaturAussteller
     if (-not $signiert -and -not $SUStatus.Bestaetigt) {
         $SUStatus.Bestaetigt = $true
-        $E.TxtNeueFassung.Text = 'Das Setup ist noch nicht signiert; Windows meldet evtl. einen unbekannten Herausgeber. Die Prüfsumme wird vor dem Start geprüft.'
-        $E.BtnNeueFassung.Content = 'Ja, installieren'
+        $E.TxtNeueFassung.Text = $T['selbst_unsigniert_hinweis']
+        $E.BtnNeueFassung.Content = $T['selbst_ja_installieren']
         return
     }
     $tagNeu = $script:NeueFassung.Tag
     $E.BtnNeueFassung.IsEnabled = $false
     $E.BtnFassungSpaeter.IsEnabled = $false
-    $E.TxtNeueFassung.Text = 'Wird geladen und installiert …'
+    $E.TxtNeueFassung.Text = $T['selbst_wird_geladen']
     $rs = [runspacefactory]::CreateRunspace()
     $rs.Open()
     $rs.SessionStateProxy.SetVariable('Modul', $SelbstUpdateDatei)
@@ -1710,7 +1860,7 @@ $E.BtnNeueFassung.Add_Click({
         $ok = $erg -and $erg.Gestartet -and $erg.ExitCode -eq 0
         try {
             $zeile = '[{0}] [GUI] [{1}] Selbst-Update auf {2}: {3}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),
-                     $(if ($ok) { 'INFO' } else { 'ERROR' }), $tagNeu, $(if ($erg) { $erg.Meldung } else { 'keine Antwort' })
+                     $(if ($ok) { 'INFO' } else { 'ERROR' }), $tagNeu, $(if ($erg) { $erg.Meldung } else { $T['selbst_keine_antwort'] })
             Add-Content -Path $LogPfad -Value $zeile -Encoding UTF8
         } catch { }
         if ($ok) {
@@ -1718,8 +1868,8 @@ $E.BtnNeueFassung.Add_Click({
             $fenster.Close()
             return
         }
-        $E.TxtNeueFassung.Text = "Nicht installiert: $(if ($erg) { $erg.Meldung } else { 'keine Antwort' }). Die bisherige Version bleibt."
-        $E.BtnNeueFassung.Content = 'Neue Version installieren'
+        $E.TxtNeueFassung.Text = ($T['selbst_nicht_installiert_format'] -f $(if ($erg) { $erg.Meldung } else { $T['selbst_keine_antwort'] }))
+        $E.BtnNeueFassung.Content = $T['neue_fassung_knopf']
         $SUStatus.Bestaetigt = $false
         $E.BtnNeueFassung.IsEnabled = $true
         $E.BtnFassungSpaeter.IsEnabled = $true
@@ -1765,8 +1915,8 @@ if ($Selbsttest) {
     Lade-Nebenher
     $frist = [datetime]::UtcNow.AddSeconds(20)
     while ([datetime]::UtcNow -lt $frist -and
-           ($E.TxtHardware.Text -eq 'Hardware wird erkannt …' -or
-            $E.TxtAufgabe.Text  -eq 'Aufgabenplanung wird gelesen …')) {
+           ($E.TxtHardware.Text -eq $T['hardware_bekannt'] -or
+            $E.TxtAufgabe.Text  -eq $T['aufgabe_bekannt'])) {
         # Die Nachrichtenschleife von Hand drehen: Ohne ShowDialog laeuft der
         # Dispatcher nicht, und der Takt, der das Ergebnis abholt, kaeme nie.
         [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke(
@@ -1777,8 +1927,8 @@ if ($Selbsttest) {
     Write-Host "Aufgabe:   $($E.TxtAufgabe.Text)"
     Write-Host "Letzter:   $($E.TxtLetzterLauf.Text)"
     $offen = @()
-    if ($E.TxtHardware.Text -eq 'Hardware wird erkannt …')     { $offen += 'Hardware' }
-    if ($E.TxtAufgabe.Text  -eq 'Aufgabenplanung wird gelesen …') { $offen += 'Aufgabe' }
+    if ($E.TxtHardware.Text -eq $T['hardware_bekannt'])     { $offen += 'Hardware' }
+    if ($E.TxtAufgabe.Text  -eq $T['aufgabe_bekannt']) { $offen += 'Aufgabe' }
     if ($offen) { Write-Host "NICHT nachgeladen: $($offen -join ', ')"; exit 1 }
     exit 0
 }
@@ -1787,7 +1937,12 @@ if ($NurPruefen) {
     Write-Host "Fenster aufgebaut, alle $($E.Count) Elemente gefunden."
     Write-Host "Erscheinung: $Erscheinung -> $(if ($AppsHell) { 'hell' } else { 'dunkel' })"
     Write-Host "Kern: $Kern"
+    Write-Host "Sprache: $Sprache"
+    Write-Host ("Knopf: {0} | Bereit: {1}" -f $E.TxtBtnStart.Text, $E.TxtProtokoll.Text)
     exit 0
 }
+
+Markiere-Knopf $E.BtnSpracheDe ($Sprache -eq 'de')
+Markiere-Knopf $E.BtnSpracheEn ($Sprache -eq 'en')
 
 [void]$fenster.ShowDialog()

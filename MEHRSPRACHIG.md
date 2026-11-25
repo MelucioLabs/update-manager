@@ -1,15 +1,17 @@
-# Mehrsprachigkeit (Vorschlag, noch nicht umgebaut)
+# Mehrsprachigkeit (Vorschlag, teils umgebaut)
 
-Stand 28.09.2026. Beschreibt, wie die Texte aus den Skripten in Sprachdateien
-`lang/*.json` wandern könnten, mit einem Umschalter im Fenster. **Nichts davon
-ist gebaut.**
+Stand 28.09.2026, ergänzt 25.11.2026. Beschreibt, wie die Texte aus den
+Skripten in Sprachdateien `lang/*.json` wandern könnten, mit einem
+Umschalter im Fenster. **Der Fensterteil ist umgesetzt, aber auf eigene
+Art** (Modul `gui-sprache.ps1`, Schalter in den Einstellungen); der Rest —
+lang/-Dateien für den Kern — ist weiter Vorschlag.
 
 ## Wie es heute ist
 
 | Teil | Sprache | Wie |
 |---|---|---|
 | Kern `universal-update-manager.ps1` | DE und EN | zwei Hashtabellen `$T = @{ … }` im Skript, rund 240 Schlüssel je Sprache; Auswahl über `(Get-Culture).TwoLetterISOLanguageName` |
-| Fenster `update-manager-gui.ps1` | nur DE | rund 30 Texte fest im XAML, dazu Meldungen im Code |
+| Fenster `update-manager-gui.ps1` | DE und EN (seit „Einstellungen und Sprache“, 25.11.2026) | zwei Tabellen im eigenen Modul `gui-sprache.ps1`, Auswahl in den Einstellungen, gespeichert in update-config.local.json; ein Teil des Vorschlags unten ist damit umgesetzt, die lang/-Dateien bleiben ungebaut |
 | Linux `linux/update-manager.sh` | DE und EN | Textpaare direkt im Aufruf, nach `LANG` |
 | Setup `installer/update-manager.iss` | DE und EN | `[Languages]` und `[CustomMessages]` von Inno Setup |
 
