@@ -22,12 +22,11 @@ if %errorLevel% == 0 (
     REM visible until the WPF window came up. -WorkingDirectory keeps what
     REM the old `cd /d "%~dp0"` did; the return chain rests in the GUI
     REM itself, which reports failures in its own window and in the log.
-    REM Declined UAC or a dying elevated PowerShell must stay visible (Leiti,
-    REM 25.11.2026): the try/catch writes the error to the known log path and
-    REM returns exit 1; the echo plus pause below keeps this window open long
-    REM enough to read it. On success the console closes by itself and only
-    REM the hidden GUI remains (no second console, no flash).
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Start-Process -FilePath 'powershell.exe' -Verb RunAs -WorkingDirectory '%~dp0' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File','%~dp0update-manager-gui.ps1' -ErrorAction Stop; exit 0 } catch { try { Add-Content -Path ($env:ProgramData + '\UpdateManager\universal-update-manager.log') -Value ('[{0}] [START] [ERROR] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $_.Exception.Message) -Encoding UTF8 } catch { }; exit 1 }"
+    REM Chip 52 (25.11.2026): the elevated target runs via -Command with an
+    REM & { ... } block instead of a file argument. Elevated + hidden window
+    REM plus a file argument died immediately with exit code -196608 on
+    REM David's machine (verified in the field); the -Command form opens.
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Start-Process -FilePath 'powershell.exe' -Verb RunAs -WorkingDirectory '%~dp0' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-Command','& { Set-Location -LiteralPath ''%~dp0''; & ''%~dp0update-manager-gui.ps1'' }' -ErrorAction Stop; exit 0 } catch { try { Add-Content -Path ($env:ProgramData + '\UpdateManager\universal-update-manager.log') -Value ('[{0}] [START] [ERROR] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $_.Exception.Message) -Encoding UTF8 } catch { }; exit 1 }"
     if errorlevel 1 (
         echo Die Administrator-Rechte wurden verweigert oder der Start schlug fehl.
         echo Protokoll: C:\ProgramData\UpdateManager\universal-update-manager.log
@@ -38,11 +37,9 @@ if %errorLevel% == 0 (
 
 :RunScript
 cd /d "%~dp0"
-
-REM -WindowStyle Hidden: The PowerShell console stays closed, only the WPF
-REM window is visible. Without it two windows stand there, and the grey
-REM console looks like something went wrong.
-powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0update-manager-gui.ps1"
+REM Chip 52 (25.11.2026): auch dieser Zweig startet ueber -Command mit
+REM & { ... } - bei erhoehter .bat direkt ohne zweite UAC-Abfrage.
+powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "& { Set-Location -LiteralPath '%~dp0'; & '%~dp0update-manager-gui.ps1' }"
 
 if %errorlevel% neq 0 (
     echo.

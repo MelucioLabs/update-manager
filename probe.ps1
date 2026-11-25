@@ -743,23 +743,22 @@ if (Test-Path $Gui) {
     }
 }
 
-# ── 5g. Erhoehung ohne Konsolen-Blitz (Chip 49) ─────────────────────────────
-# Die Admin-Abfrage startete die .bat neu; das Konsolenfenster blieb bis zum
-# Start des WPF-Fensters sichtbar. Jetzt: Erhoehung DIREKT gegen das
-# versteckte powershell-Fenster der Oberflaeche, mit Arbeitsverzeichnis
-# (vorherige cd /d) und ohne Neustart der .bat.
+# ── 5g. Erhoehung ohne Konsolen-Blitz (Chip 49); Start per -Command (Chip 52)
+# Chip 52 (25.11.2026): Die Kombination erhoeht + -WindowStyle Hidden + -File
+# stirbt sofort mit Exit-Code -196608. Beide Zweige der .bat starten deshalb
+# ueber -Command mit einem & { ... }-Block; kein -File darf uebrig bleiben.
 if (Test-Path $Bat) {
     $batText5g = Get-Content $Bat -Raw
     $direkt5g = ($batText5g -match 'Verb RunAs') -and
         ($batText5g -match 'WindowStyle.{0,3}Hidden') -and
-        ($batText5g -match 'WorkingDirectory') -and
-        ($batText5g -match '-File.{0,3}%~dp0update-manager-gui\.ps1')
+        ($batText5g -match [regex]::Escape('& { Set-Location -LiteralPath')) -and
+        ($batText5g -notmatch '-File\b')
     $neu5g = $batText5g -match '%~f0'
     if ($direkt5g -and -not $neu5g) {
-        Melde 'ok' 'Erhoehung startet direkt die versteckte Oberflaeche (powershell -WindowStyle Hidden -File) statt die .bat neu'
+        Melde 'ok' 'Erhoehung startet direkt die versteckte Oberflaeche (powershell -Command mit & statt -File)'
     } else {
         if ($neu5g) { Schlecht 'Erhoehung startet die .bat selbst neu (%~f0) - das Konsolenfenster blitzt' }
-        if (-not $direkt5g) { Schlecht 'Erhoehung ohne den direkten Weg (Verb RunAs / WindowStyle Hidden / WorkingDirectory / -File auf update-manager-gui.ps1 fehlt)' }
+        if (-not $direkt5g) { Schlecht 'Erhoehung ohne den direkten Weg (Verb RunAs / WindowStyle Hidden / -Command mit & statt -File)' }
     }
 
     # Verweigern-Fall sichtbar (Leiti, 25.11.2026): UAC abgelehnt oder das
