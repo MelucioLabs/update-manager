@@ -389,6 +389,14 @@ if ((Test-Path $Gui) -and (Test-Path $Sprach)) {
 
     $benutzt4b = @{}
     foreach ($m in [regex]::Matches($guiT4b, "\`$T\['([a-z][a-z0-9_]*)'\]")) { $benutzt4b[$m.Groups[1].Value] = $true }
+    # Serif der Protokoll-Ansicht (protokoll-ansicht.ps1): Ihre Funktionen
+    # bekommen die Tabelle als $SprachTabelle und müssen dieselben Schluessel
+    # wie das Fenster verwenden.
+    $ansichtP4b = Join-Path $Ordner 'protokoll-ansicht.ps1'
+    if (Test-Path $ansichtP4b) {
+        $ansT4b = Get-Content $ansichtP4b -Raw
+        foreach ($m in [regex]::Matches($ansT4b, "\`$SprachTabelle\['([a-z][a-z0-9_]*)'\]")) { $benutzt4b[$m.Groups[1].Value] = $true }
+    }
     foreach ($m in [regex]::Matches($modT4b, "(?<=Get-GuiSprachText )'([a-z][a-z0-9_]*)'")) { $benutzt4b[$m.Groups[1].Value] = $true }
     foreach ($m in [regex]::Matches($guiT4b, "__T_([a-z][a-z0-9_]*)__")) { $benutzt4b[$m.Groups[1].Value] = $true }
 
@@ -1464,25 +1472,30 @@ if (-not (Test-Path $Ansicht)) {
         Pruefe ((Get-LaufAnzahl $e) -eq 2) "Laufzaehler: $(Get-LaufAnzahl $e) statt 2 (ein FAILED, ein DONE)"
         Pruefe ((Get-LaufAnzahl @()) -eq 0) 'Laufzaehler ohne Eintraege muss 0 sein'
         $heute = [datetime]'2026-10-08 12:00'
-        Pruefe ((Get-TagesKopf '2026-10-08' $heute) -eq 'Heute, 8. Oktober 2026') "Tageskopf heute: $(Get-TagesKopf '2026-10-08' $heute)"
-        Pruefe ((Get-TagesKopf '2026-10-07' $heute) -eq 'Gestern, 7. Oktober 2026') 'Tageskopf gestern'
-        Pruefe ((Get-TagesKopf '2026-10-05' $heute) -like 'Montag, 5. Oktober 2026') "Tageskopf Wochentag: $(Get-TagesKopf '2026-10-05' $heute)"
+        Pruefe ((Get-TagesKopf '2026-10-08' $heute -SprachTabelle $T) -eq 'Heute, 8. Oktober 2026') "Tageskopf heute: $(Get-TagesKopf '2026-10-08' $heute -SprachTabelle $T)"
+        Pruefe ((Get-TagesKopf '2026-10-07' $heute -SprachTabelle $T) -eq 'Gestern, 7. Oktober 2026') 'Tageskopf gestern'
+        Pruefe ((Get-TagesKopf '2026-10-05' $heute -SprachTabelle $T) -like 'Montag, 5. Oktober 2026') "Tageskopf Wochentag: $(Get-TagesKopf '2026-10-05' $heute -SprachTabelle $T)"
 
         # Ergebniskarte: die Faelle aus dem Entwurf.
         $lauf = Get-LetzterLauf $e
-        $k = Bilde-ErgebnisKarte $lauf
+        $k = Bilde-ErgebnisKarte $lauf -SprachTabelle $T
         Pruefe ($lauf.Anzahl -eq 3 -and $lauf.Fehler -eq 1) "Letzter Lauf: $($lauf.Anzahl) Updates, $($lauf.Fehler) Fehler (erwartet 3 und 1)"
         Pruefe ($k.Ton -eq 'warn' -and $k.Zahl -eq '3') "3 Updates mit Fehler muss gelb sein, ist $($k.Ton)"
-        $k = Bilde-ErgebnisKarte @{ Gefunden = $true; Gescheitert = $false; Fehler = 0; Anzahl = 5 }
+        $k = Bilde-ErgebnisKarte @{ Gefunden = $true; Gescheitert = $false; Fehler = 0; Anzahl = 5 } -SprachTabelle $T
         Pruefe ($k.Ton -eq 'gut' -and $k.Satz -eq 'Es gab 5 Updates, alle erfolgreich installiert.') "5 Updates ohne Fehler: $($k.Satz)"
-        $k = Bilde-ErgebnisKarte @{ Gefunden = $true; Gescheitert = $false; Fehler = 0; Anzahl = 1 }
+        $k = Bilde-ErgebnisKarte @{ Gefunden = $true; Gescheitert = $false; Fehler = 0; Anzahl = 1 } -SprachTabelle $T
         Pruefe ($k.Satz -eq 'Es gab 1 Update, erfolgreich installiert.') "1 Update: $($k.Satz)"
-        $k = Bilde-ErgebnisKarte @{ Gefunden = $true; Gescheitert = $true; Fehler = 2; Anzahl = 0 }
+        $k = Bilde-ErgebnisKarte @{ Gefunden = $true; Gescheitert = $true; Fehler = 2; Anzahl = 0 } -SprachTabelle $T
         Pruefe ($k.Ton -eq 'schlecht') 'gescheiterter Lauf muss rot sein'
-        $k = Bilde-ErgebnisKarte @{ Gefunden = $true; Gescheitert = $false; Fehler = 0; Anzahl = 0 }
+        $k = Bilde-ErgebnisKarte @{ Gefunden = $true; Gescheitert = $false; Fehler = 0; Anzahl = 0 } -SprachTabelle $T
         Pruefe ($k.Ton -eq 'neutral' -and $k.Satz -like 'Alles aktuell*') 'nichts zu tun muss grau und "Alles aktuell" sein'
-        $k = Bilde-ErgebnisKarte @{ Gefunden = $false; Gescheitert = $false; Fehler = 0; Anzahl = 0 }
+        $k = Bilde-ErgebnisKarte @{ Gefunden = $false; Gescheitert = $false; Fehler = 0; Anzahl = 0 } -SprachTabelle $T
         Pruefe ($k.Ton -eq 'neutral') 'ohne Lauf im Protokoll muss die Karte grau sein'
+        # Englisch (Davids Befund 25.11.2026): die Ergebniskarte durfte im
+        # englischen Fenster keinen deutschen Satz mehr zeigen.
+        $T4bEn = Get-GuiSprachTabelle -Code 'en'
+        $k = Bilde-ErgebnisKarte @{ Gefunden = $true; Gescheitert = $false; Fehler = 0; Anzahl = 0 } -SprachTabelle $T4bEn
+        Pruefe ($k.Satz -eq $T4bEn['ergeb_alles_aktuell']) "Ergebniskarte auf Englisch zeigt deutschen Wortlaut: $($k.Satz)"
         Pruefe ((Get-LetzterLauf (ConvertTo-ProtokollEintraege @('[2026-10-08 04:00:01] [INFO] nichts'))).Gefunden -eq $false) 'Lauf ohne Marke wird als letzter Lauf gelesen'
         , $r
     }

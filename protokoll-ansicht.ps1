@@ -83,16 +83,22 @@ function Get-ProtokollZaehler {
 
 function Get-TagesKopf {
     # "Heute, 8. Oktober 2026" / "Gestern, ..." / "Mittwoch, 7. Oktober 2026"
-    param([string]$Datum, [datetime]$Heute = (Get-Date))
+    # Bilingual (David's finding, 25.11.2026): the words come from the GUI
+    # language table, the date pattern from the culture behind $Sprache.
+    param([string]$Datum, [datetime]$Heute = (Get-Date), [hashtable]$SprachTabelle, [string]$Sprache = 'de')
     try {
         $d = [datetime]::ParseExact($Datum, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
     } catch { return $Datum }
-    $de = [Globalization.CultureInfo]::GetCultureInfo('de-DE')
-    $voll = $d.ToString('d. MMMM yyyy', $de)
+    $kultur = if ($Sprache -eq 'en') { 'en-US' } else { 'de-DE' }
+    $ci = [Globalization.CultureInfo]::GetCultureInfo($kultur)
+    $muster = if ($Sprache -eq 'en') { 'MMMM d, yyyy' } else { 'd. MMMM yyyy' }
+    $voll = $d.ToString($muster, $ci)
+    $heuteW = $SprachTabelle['tageskopf_heute']
+    $gesternW = $SprachTabelle['tageskopf_gestern']
     $diff = ($Heute.Date - $d.Date).Days
-    if ($diff -eq 0) { return "Heute, $voll" }
-    if ($diff -eq 1) { return "Gestern, $voll" }
-    return $d.ToString('dddd', $de) + ", $voll"
+    if ($diff -eq 0) { return "$heuteW, $voll" }
+    if ($diff -eq 1) { return "$gesternW, $voll" }
+    return $d.ToString('dddd', $ci) + ", $voll"
 }
 
 function Get-StufenZeichen {
@@ -144,28 +150,30 @@ function Bilde-ErgebnisKarte {
     <#
         Die Standardansicht in einem Satz: Zahl, Satz, Ton.
         Ton: gut | warn | schlecht | neutral.
+        Die Saetze kommen aus der Sprachtabelle (gui-sprache.ps1); im
+        englischen Fenster zeigte diese Karte sonst deutschen Wortlaut
+        (Davids Befund 25.11.2026).
         -> @{ Zahl; Satz; Ton }
     #>
-    param($Lauf)
-    if (-not $Lauf.Gefunden) { return @{ Zahl = [string][char]0x2013; Satz = 'Noch kein stiller Lauf im Protokoll.'; Ton = 'neutral' } }
+    param($Lauf, [hashtable]$SprachTabelle)
+    if (-not $Lauf.Gefunden) { return @{ Zahl = [string][char]0x2013; Satz = $SprachTabelle['noch_kein_stiller']; Ton = 'neutral' } }
     $n = [int]$Lauf.Anzahl
     $f = [int]$Lauf.Fehler
     if ($Lauf.Gescheitert) {
-        return @{ Zahl = '!'; Satz = 'Der letzte Lauf ist gescheitert. Er wird nachgeholt.'; Ton = 'schlecht' }
+        return @{ Zahl = '!'; Satz = $SprachTabelle['ergeb_gescheitert_lang']; Ton = 'schlecht' }
     }
     if ($n -gt 0 -and $f -eq 0) {
-        $wort = if ($n -eq 1) { 'Es gab 1 Update, erfolgreich installiert.' } else { "Es gab $n Updates, alle erfolgreich installiert." }
-        return @{ Zahl = "$n"; Satz = $wort; Ton = 'gut' }
+        $satz = if ($n -eq 1) { $SprachTabelle['ergeb_install_eins'] } else { $SprachTabelle['ergeb_installiert_format'] -f $n }
+        return @{ Zahl = "$n"; Satz = $satz; Ton = 'gut' }
     }
+    $fw = $SprachTabelle['fehler_zaehl_format'] -f $f
     if ($n -gt 0) {
-        $fw = if ($f -eq 1) { '1 Fehler' } else { "$f Fehler" }
-        return @{ Zahl = "$n"; Satz = "$n installiert, $fw. Einzelheiten unter Details."; Ton = 'warn' }
+        return @{ Zahl = "$n"; Satz = ($SprachTabelle['ergeb_teilweise_format'] -f $n, $fw); Ton = 'warn' }
     }
     if ($f -gt 0) {
-        $fw = if ($f -eq 1) { '1 Fehler' } else { "$f Fehler" }
-        return @{ Zahl = '!'; Satz = "Der Lauf endete mit $fw. Einzelheiten unter Details."; Ton = 'warn' }
+        return @{ Zahl = '!'; Satz = ($SprachTabelle['ergeb_endete_format'] -f $fw); Ton = 'warn' }
     }
-    return @{ Zahl = '0'; Satz = 'Alles aktuell. Nichts zu tun.'; Ton = 'neutral' }
+    return @{ Zahl = '0'; Satz = $SprachTabelle['ergeb_alles_aktuell']; Ton = 'neutral' }
 }
 
 function Get-LaufAnzahl {

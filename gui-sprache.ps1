@@ -142,6 +142,19 @@ $script:GuiTabelleDe = @{
     "protokoll_anzeige_fehler_format" = "Protokoll konnte nicht angezeigt werden: {0}"
     "protokoll_bereit"       = "Bereit. Nichts wird verändert, bevor eine Schaltfläche gedrückt wird."
 
+    # Tageskoepfe und Ergebniskarte aus protokoll-ansicht.ps1. Diese Sätze
+    # standen dort fest eingebaut (deutsch) und zeigten im englischen Fenster
+    # deutschen Wortlaut; seit dem 25.11.2026 liest die Ansicht sie von hier.
+    "tageskopf_heute"           = "Heute"
+    "tageskopf_gestern"         = "Gestern"
+    "ergeb_gescheitert_lang"    = "Der letzte Lauf ist gescheitert. Er wird nachgeholt."
+    "ergeb_install_eins"        = "Es gab 1 Update, erfolgreich installiert."
+    "ergeb_installiert_format"  = "Es gab {0} Updates, alle erfolgreich installiert."
+    "ergeb_teilweise_format"    = "{0} installiert, {1}. Einzelheiten unter Details."
+    "ergeb_endete_format"       = "Der Lauf endete mit {0}. Einzelheiten unter Details."
+    "ergeb_alles_aktuell"       = "Alles aktuell. Nichts zu tun."
+    "fehler_zaehl_format"       = "{0} Fehler"
+
     # Zeile über den letzten stillen Lauf
     "noch_kein_stiller"      = "Noch kein stiller Lauf im Protokoll."
     "unbekannt"              = "unbekannt"
@@ -272,6 +285,19 @@ $script:GuiTabelleEn = @{
     "protokoll_leer"         = "The log is empty."
     "protokoll_anzeige_fehler_format" = "The log could not be shown: {0}"
     "protokoll_bereit"       = "Ready. Nothing changes until a button is pressed."
+
+    # Day headers and result card from protokoll-ansicht.ps1 (see German
+    # table above): these sentences used to be hardcoded German there and
+    # showed up untranslated in the English window.
+    "tageskopf_heute"           = "Today"
+    "tageskopf_gestern"         = "Yesterday"
+    "ergeb_gescheitert_lang"    = "The last run failed. It will be retried."
+    "ergeb_install_eins"        = "There was 1 update, installed successfully."
+    "ergeb_installiert_format"  = "There were {0} updates, all installed successfully."
+    "ergeb_teilweise_format"    = "{0} installed, {1}. Details under Details."
+    "ergeb_endete_format"       = "The run ended with {0}. Details under Details."
+    "ergeb_alles_aktuell"       = "All up to date. Nothing to do."
+    "fehler_zaehl_format"       = "{0} errors"
 
     # Line about the last silent run
     "noch_kein_stiller"      = "No silent run in the log yet."

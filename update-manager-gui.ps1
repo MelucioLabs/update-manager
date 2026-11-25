@@ -431,7 +431,7 @@ $xamlText = @'
                      Foreground="{StaticResource AkzentText}" VerticalAlignment="Bottom"/>
           <TextBlock FontSize="12" Foreground="{StaticResource SchriftLei}"
                      Margin="12,0,0,5" VerticalAlignment="Bottom">
-            <Run Text="__T_bereitgestellt_von__"/><Hyperlink x:Name="LinkMelucio"
+            <Run Text="__T_bereitgestellt_von__ "/><Hyperlink x:Name="LinkMelucio"
                  NavigateUri="https://meluciolabs.de"
                  Foreground="{StaticResource AkzentText}">MelucioLabs</Hyperlink>
           </TextBlock>
@@ -1493,7 +1493,7 @@ function Zeige-LetztenLaufKarte {
         }
         $zeilen = Get-Content -Path $LogPfad -Tail 400 -Encoding UTF8 -ErrorAction Stop
         $lauf = Get-LetzterLauf (ConvertTo-ProtokollEintraege $zeilen)
-        $karte = Bilde-ErgebnisKarte $lauf
+        $karte = Bilde-ErgebnisKarte $lauf -SprachTabelle $T
         $zeit = ''
         if ($lauf.Gefunden -and $lauf.Wann -match '^(\d{4})-(\d\d)-(\d\d) (\d\d:\d\d)') {
             $zeit = ($T['letzter_stiller_format'] -f ("$($Matches[3]).$($Matches[2]).$($Matches[1]), $($Matches[4])"))
@@ -1501,7 +1501,7 @@ function Zeige-LetztenLaufKarte {
         Zeige-Ergebnis -Zahl $karte.Zahl -Satz $karte.Satz -Zeit $zeit -Ton $karte.Ton
         $n = Get-LaufAnzahl (ConvertTo-ProtokollEintraege $zeilen)
         $E.TxtKachelProto.Text = if ($n -eq 1) { $T['laeufe_eins'] } else { ($T['laeufe_zahl_format'] -f $n) }
-        $E.TxtKachelProtoZeit.Text = if ($lauf.Gefunden -and $lauf.Wann -match '^\d{4}-(\d\d)-(\d\d)') { ($T['kachel_zeit_format'] -f ("$($Matches[2]).$($Matches[1]).")) } else { 'im Protokoll' }
+        $E.TxtKachelProtoZeit.Text = if ($lauf.Gefunden -and $lauf.Wann -match '^\d{4}-(\d\d)-(\d\d)') { ($T['kachel_zeit_format'] -f ("$($Matches[2]).$($Matches[1]).")) } else { $T['im_protokoll'] }
         # Die Kopfzeile sagt dasselbe: nicht doppelt zeigen.
         $E.TxtLetzterLauf.Visibility = 'Collapsed'
     } catch {
@@ -1524,7 +1524,7 @@ function Zeige-LaufErgebnis {
                 -Ton $(if ($sicher -gt 0) { 'warn' } else { 'gut' })
         } elseif ($Anzahl -gt 0) {
             $satz = if ($Anzahl -eq 1) { $T['es_gab_eins'] } else { ($T['es_gab_zahl_format'] -f $Anzahl) }
-            Zeige-Ergebnis -Zahl "$Anzahl" -Satz $satz -Zeit "Fertig nach $Minuten Minuten." -Ton 'gut'
+            Zeige-Ergebnis -Zahl "$Anzahl" -Satz $satz -Zeit ($T['fertig_minuten_format'] -f $Minuten) -Ton 'gut'
         } else {
             Zeige-Ergebnis -Zahl ([string][char]0x2713) -Satz $T['fertig_nichts'] -Zeit ($T['nach_minuten_format'] -f $Minuten) -Ton 'gut'
         }
@@ -1567,7 +1567,7 @@ function Zeige-ProtokollAnsicht {
         $zeilen = Get-Content -Path $LogPfad -Tail 2000 -Encoding UTF8 -ErrorAction Stop
         $eintraege = ConvertTo-ProtokollEintraege $zeilen
         $zaehler = Get-ProtokollZaehler $eintraege
-        $E.TxtBtnFilterFehler.Text = "Fehler ($($zaehler.Fehler))"
+        $E.TxtBtnFilterFehler.Text = ($T['filter_fehler_format'] -f $zaehler.Fehler)
         Markiere-Knopf $E.BtnFilterAlles (-not $script:FilterFehler)
         Markiere-Knopf $E.BtnFilterFehler $script:FilterFehler
         $tage = Gruppiere-ProtokollTage $eintraege -NurFehler:$script:FilterFehler
@@ -1592,7 +1592,7 @@ function Zeige-ProtokollAnsicht {
             $kopf.Margin = New-Object System.Windows.Thickness(0, 12, 0, 4)
             $kopf.BorderBrush = $lei
             $kopf.BorderThickness = New-Object System.Windows.Thickness(0, 0, 0, 1)
-            $r = New-Object System.Windows.Documents.Run((Get-TagesKopf $tag.Datum).ToUpper())
+            $r = New-Object System.Windows.Documents.Run((Get-TagesKopf $tag.Datum -SprachTabelle $T -Sprache $Sprache).ToUpper())
             $r.FontSize = 12; $r.FontWeight = 'SemiBold'; $r.Foreground = $lei
             [void]$kopf.Inlines.Add($r); [void]$doc.Blocks.Add($kopf)
             foreach ($ein in $tag.Eintraege) {
