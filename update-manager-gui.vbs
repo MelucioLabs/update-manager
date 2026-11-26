@@ -34,11 +34,25 @@
 ' with a hard stop so this starter can never outlive the session. On a
 ' workshop machine a parallel -NurPruefen launch can satisfy that check; on
 ' a user desktop nothing else names this file.
+'
+' FIELD TEST 26.11.2026: the tester saw the failure box naming the log, but
+' the log stayed empty. Two causes, both fixed here:
+' - The main log grants write access to SYSTEM and Administratoren only
+'   (measured ACL); this starter runs unelevated, so its append silently
+'   failed and ON ERROR RESUME NEXT swallowed it. A second file beside it
+'   (starter-fehler.log) now catches that case: normal users may create
+'   files in that folder. The message says which file really holds the
+'   entry.
+' - Declined question, dead carrier and an open UAC question all showed the
+'   SAME generic text. Now each case says what happened and what helps.
+'   And a manager already running quits this starter quietly: no second
+'   window, no second UAC question.
+'
 ' Encoding: this file must stay ANSI (Windows-1252), wscript does not read
 ' UTF-8 - the German message texts carry the umlauts as single bytes.
 Option Explicit
 
-Dim fso, wsShell, ordner, guiPfad, logPfad
+Dim fso, wsShell, ordner, guiPfad, logPfad, starterLogPfad
 
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set wsShell = CreateObject("WScript.Shell")
@@ -49,23 +63,53 @@ ordner = fso.GetParentFolderName(WScript.ScriptFullName)
 guiPfad = fso.BuildPath(ordner, "update-manager-gui.ps1")
 logPfad = fso.BuildPath(wsShell.ExpandEnvironmentStrings("%ProgramData%"), _
     "UpdateManager\universal-update-manager.log")
+' The fallback for log lines the main log cannot take (ACL, see above).
+starterLogPfad = fso.BuildPath(fso.GetParentFolderName(logPfad), _
+    "starter-fehler.log")
 
 Sub Misslinge(nachricht)
     ' Same failure channel as the .bat: log line first, visible message
     ' second (here a wscript MessageBox, because no console exists).
+    Dim strom, ziel
+    ziel = ""
     On Error Resume Next
-    Dim strom
     Set strom = fso.OpenTextFile(logPfad, 8, True)
-    strom.WriteLine "[" & FormatDateTime(Now, vbGeneralDate) & "] [START] [ERROR] " & nachricht
-    strom.Close
-    MsgBox nachricht & vbCrLf & vbCrLf & "Protokoll: " & logPfad, _
-        vbExclamation, "Universal Update Manager"
+    If Err.Number = 0 Then
+        strom.WriteLine "[" & FormatDateTime(Now, vbGeneralDate) & "] [START] [ERROR] " & nachricht
+        strom.Close
+        ziel = logPfad
+    Else
+        Err.Clear
+        Set strom = fso.OpenTextFile(starterLogPfad, 8, True)
+        If Err.Number = 0 Then
+            strom.WriteLine "[" & FormatDateTime(Now, vbGeneralDate) & "] [START] [ERROR] " & nachricht
+            strom.Close
+            ziel = starterLogPfad
+        End If
+        Err.Clear
+    End If
+    On Error GoTo 0
+    If ziel = "" Then
+        MsgBox nachricht, vbExclamation, "Universal Update Manager"
+    Else
+        MsgBox nachricht & vbCrLf & vbCrLf & "Protokoll: " & ziel, _
+            vbExclamation, "Universal Update Manager"
+    End If
     WScript.Quit 1
 End Sub
 
 If Not fso.FileExists(guiPfad) Then
     Misslinge "Die Datei update-manager-gui.ps1 fehlt neben dem Starter."
 End If
+
+' SCHON OFFEN (Feldtest 26.11.2026): Ein Doppelklick auf die Verknuepfung bei
+' offenem Manager startete sonst einen zweiten Versuch samt zweiter
+' Rechte-Frage. Wem der Manager schon offen ist, braucht keinen zweiten Start.
+Dim wmi, laeuftSchon
+Set wmi = GetObject("winmgmts:root\cimv2")
+laeuftSchon = (wmi.ExecQuery( _
+    "SELECT ProcessId FROM Win32_Process WHERE CommandLine LIKE '%update-manager-gui.ps1%'").Count > 0)
+If laeuftSchon Then WScript.Quit 0
 
 Dim shellAnwendung
 On Error Resume Next
@@ -84,17 +128,20 @@ shellAnwendung.ShellExecute "powershell.exe", argumente, ordner, "runas", 0
 If Err.Number <> 0 Then
     beschreibung = Err.Description
     Err.Clear
-    Misslinge "Die Administrator-Rechte wurden verweigert oder der Start schlug fehl (" & beschreibung & ")."
+    Misslinge "Der Start mit Administratorrechten scheiterte (" & beschreibung & _
+        "). Meist wurde die Rechte-Frage abgebrochen oder verweigert: " & _
+        "neu starten und die Frage mit Ja beantworten."
 End If
 On Error GoTo 0
 
-Dim wmi, abfrage, treffer, uhr, harteGrenze
-Set wmi = GetObject("winmgmts:root\cimv2")
+Dim abfrage, treffer, uhr, harteGrenze, frageOffen
 uhr = Timer
 harteGrenze = uhr + 120
+frageOffen = False
 Do
     WScript.Sleep 500
-    If wmi.ExecQuery("SELECT ProcessId FROM Win32_Process WHERE Name='consent.exe'").Count > 0 Then
+    frageOffen = (wmi.ExecQuery("SELECT ProcessId FROM Win32_Process WHERE Name='consent.exe'").Count > 0)
+    If frageOffen Then
         uhr = Timer
         harteGrenze = uhr + 120
     End If
@@ -104,6 +151,16 @@ Do
     If treffer > 0 Then Exit Do
 Loop While Timer < uhr + 5 And Timer < harteGrenze
 
-If treffer = 0 Then
-    Misslinge "Die Administrator-Rechte wurden verweigert oder der Start schlug fehl."
+If treffer > 0 Then WScript.Quit 0
+
+If frageOffen Then
+    ' Die harte Grenze ist erreicht, die Rechte-Frage steht aber noch: Nicht
+    ' behaupten, der Start sei "gescheitert" (26.11.2026), sondern nur sagen,
+    ' was gilt - der Klick auf die Frage entscheidet.
+    Misslinge "Die Rechte-Frage steht noch offen. Nach dem Antworten erscheint " & _
+        "die Oberflaeche; sonst einfach erneut starten."
 End If
+
+Misslinge "Die Oberflaeche erschien nicht (5 Sekunden gewartet). Meist wurde " & _
+    "die Rechte-Frage abgelehnt oder verweigert: neu starten und die Frage " & _
+    "mit Ja beantworten."

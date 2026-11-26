@@ -6,27 +6,47 @@
 # automation/update-manager/.github/ und wird von GitHub nicht beachtet
 # (Workflows zaehlen nur im .github/ der Repo-Wurzel).
 #
-# Ablauf: Tag v3.2.0 im oeffentlichen Repo setzen und pushen. Der Lauf
-#   1. prueft, dass der Tag zu $UpdaterVersion in BEIDEN Skripten passt,
+# Ablauf: Entweder ein Sync-Lauf pusht einen neuen Stand auf main (Regelfall
+# seit dem 26.11.2026: JEDER Spiegel-Stand bekommt sein eigenes Release), oder
+# ein Tag v3.2.0 wird gesetzt und gepusht, oder der Lauf startet von Hand.
+# Der Lauf
+#   1. bestimmt die Version: bei einem Tag wird geprueft, dass er zu
+#      $UpdaterVersion in BEIDEN Skripten passt; nach einem Sync zaehlt der
+#      Lauf die letzte releaste Version selbst hoch und hebt $UpdaterVersion
+#      in beiden Skripten fuer den Bau an (siehe Schritt "Version ..."),
 #   2. faehrt die Bausteinprobe (probe.ps1) unter Windows PowerShell 5.1,
 #   3. prueft das Linux-Skript (bash -n, test.sh, shellcheck),
 #   4. baut das Setup mit Inno Setup,
 #   5. signiert es ueber die SignPath Foundation (Schalter SIGNPATH_AKTIV, aus),
 #   6. legt ein Release an: Setup, Pruefsumme, Linux-Skript.
 #
-# UNGETESTET: geschrieben ohne Windows-Rechner und ohne das Ziel-Repo. Der
-# erste Tag ist deshalb am besten ein Probe-Tag (z. B. v3.2.0-rc1), das
-# Release danach von Hand loeschen.
+# Hintergrund des Auto-Releases (Feldtest 26.11.2026): Der Spiegel-Lauf im
+# Monorepo pusht nur Commits, nie Tags. Der Feldtester installierte am
+# Vormittag die Fassung v3.3.5, die MERGES aus einem spaeteren Sync fehlten —
+# der Tester sah die neuen Features als kaputt, weil sie ihm schlicht fehlten.
+# Seitdem erzeugt jeder Stand auf main sein Release aus sich heraus.
+#
+# Auf einem Zweig (workflow_dispatch ohne main) bleibt es beim alten Schema:
+# Version mit -dev als Anhängsel, Artefakt statt Release — zum Probelauf.
 
 name: Release
 
 on:
   push:
     tags: ['v*']
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
+
+# Sync-Laeufe koennen dicht aufeinander folgen (mehrere Merges am Ende eines
+# Prueftags). Ohne Serie wuerden zwei Laeufe dieselbe naechste Version
+# berechnen und das zweite Release gescheitert neu versuchen — Reihen ohne
+# Abbruch stellen die Versionen stattdessen einfach hintereinander bereit.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 jobs:
   linux:
@@ -50,7 +70,12 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $ref = '${{ github.ref_name }}'
+          function Nenne-Version([string]$Text) {
+              # "3.3.5" -> [version], alles andere = $null (Fehler folgt).
+              if ($Text -notmatch '^\d+\.\d+\.\d+$') { return $null }
+              try { return [version]$Text } catch { return $null }
+          }
+
           $inSkripten = foreach ($f in 'universal-update-manager.ps1', 'update-manager-gui.ps1') {
               $m = Select-String -Path $f -Pattern "^\`$UpdaterVersion\s*=\s*'([^']+)'" | Select-Object -First 1
               if (-not $m) { throw "$f traegt keine Zeile `$UpdaterVersion = '...'" }
@@ -59,20 +84,61 @@ jobs:
           $inSkripten = @($inSkripten | Select-Object -Unique)
           if ($inSkripten.Count -ne 1) { throw "Die Skripte nennen verschiedene Versionen: $($inSkripten -join ', ')" }
           $version = $inSkripten[0]
+          $tag = ''
           if ('${{ github.ref_type }}' -eq 'tag') {
               # v3.2.0 oder v3.2.0-rc1: der Teil vor dem Bindestrich muss passen.
+              $ref = '${{ github.ref_name }}'
               $ausTag = $ref.TrimStart('v').Split('-')[0]
               if ($ausTag -ne $version) { throw "Tag $ref passt nicht zu `$UpdaterVersion = '$version'" }
-              $version = $ref.TrimStart('v')
+              $tag = $ref
+          } elseif ('${{ github.ref }}' -eq 'refs/heads/main') {
+              # Jeder Spiegel-Stand ist es wert, releast zu werden (Feldtest
+              # 26.11.2026): Der Sync pusht nur Commits, und ein Stand ohne
+              # neuen Tag blieb sonst ohne Release.
+              #
+              # Liegt die Skript-Version schon als Tag vor, zaehlt dieser Lauf
+              # die kleine Version hoch und hebt `$UpdaterVersion in beiden
+              # Skripten fuer den Bau an — nicht als Commit: main bleibt die
+              # reine Abbildung des Monorepo-Stands, versionsdrahtig wird nur
+              # der Bau (und mit ihm das Setup, dessen installierter Manager
+              # die Versionsnummer fuer das naechste Selbst-Update vergleicht).
+              # Einen Versionsbump im Monorepo (bump-version-PR) wie gehabt:
+              # Eilt die Nummer voraus, wird sie direkt benutzt, nicht noch
+              # einmal erhoeht.
+              $skriptVersion = Nenne-Version $version
+              if ($null -eq $skriptVersion) { throw "Skript-Version '$version' ist nicht a.b.c" }
+              $vorhandene = @(git ls-remote --tags origin 'v*' | ForEach-Object {
+                  (((($_ -split "`t")[1]) -replace 'refs/tags/', '') -replace '\^\{\}$', '').TrimStart('v')
+              } | ForEach-Object { Nenne-Version $_ } | Where-Object { $_ } | Sort-Object -Unique)
+              $hoechste = if ($vorhandene.Count -gt 0) { $vorhandene[-1] } else { [version]'0.0.0' }
+              if ($skriptVersion -gt $hoechste) {
+                  # Der Monorepo-Stand traegt schon die naechste Nummer (wie
+                  # ein bump-version-PR): genau diese Version releasen.
+              } else {
+                  $teile = @($hoechste.Major, $hoechste.Minor, [Math]::Max($hoechste.Build, 0))
+                  $teile[2] += 1
+                  $version = $teile -join '.'
+                  foreach ($f in 'universal-update-manager.ps1', 'update-manager-gui.ps1') {
+                      $bytes = [IO.File]::ReadAllBytes($f)
+                      $hatBom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
+                      $text = [Text.UTF8Encoding]::new($hatBom).GetString($bytes)
+                      $neu = [regex]::Replace($text, "(?m)^(\`$UpdaterVersion\s*=\s*')[^']+(')", "`${1}$version`$2")
+                      if ($neu -ceq $text) { throw "$f: `$UpdaterVersion ließ sich nicht auf $version anheben" }
+                      [IO.File]::WriteAllText((Resolve-Path $f), $neu, [Text.UTF8Encoding]::new($hatBom))
+                  }
+                  echo "::notice title=Version angehoben::Tag v$hoechste existierte schon; der Spiegel-Stand wird als v$version releast."
+              }
+              $tag = "v$version"
           } else {
               $version = "$version-dev"
           }
           "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
           # Rein numerisch (a.b.c.d) fuer die Versionsinfo der Setup-Datei.
           $num = @($version.Split('-')[0].Split('.'))
           while ($num.Count -lt 4) { $num += '0' }
           "versionnum=$($num[0..3] -join '.')" >> $env:GITHUB_OUTPUT
-          "Version: $version"
+          "Version: $version (Tag: $tag)"
 
       - name: Bausteinprobe (Windows PowerShell 5.1)
         shell: powershell
@@ -163,12 +229,15 @@ jobs:
           Get-Content dist\SHA256SUMS.txt
 
       - name: Release anlegen
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = '${{ github.ref_name }}'
+          # Bei einem Sync-Lauf legt gh release create zugleich den neuen Tag
+          # an, und zwar am Commit, der gerade gebaut wurde. Bei einem Tag-
+          # Lauf ist der Tag schon da.
+          $tag = '${{ steps.version.outputs.tag }}'
           $dateien = @(Get-ChildItem dist\*.exe | ForEach-Object FullName) + 'dist\SHA256SUMS.txt' + 'linux\update-manager.sh'
           # Kopf der Release-Notizen (GitHub haengt die Liste der Aenderungen an).
           $notizen = @(
@@ -184,8 +253,8 @@ jobs:
           gh @argumente
           if ($LASTEXITCODE -ne 0) { throw "gh release create ist gescheitert" }
 
-      - name: Setup als Artefakt (ohne Tag)
-        if: github.ref_type != 'tag'
+      - name: Setup als Artefakt (Zweig, kein Release)
+        if: github.ref_type != 'tag' && github.ref != 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: setup-${{ steps.version.outputs.version }}
