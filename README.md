@@ -308,6 +308,13 @@ update-manager/
 
 ## Changelog
 
+### v3.3.7 (unreleased, goes out with the release run)
+- **Starter false alarm fixed (board 596):** the starter read the window's command line via WMI; for an ELEVATED window that reads as NULL, so it reported an error while the surface was already open. The GUI now writes its process id to `C:\ProgramData\UpdateManager\gui.pid` and removes the file on close; the starter checks that marker and waits 30 instead of 5 seconds.
+- **One check, not two (board 597):** when the result card showed a check mark as the number (check-only run, or a run with nothing to do), the icon next to it appeared as a second check. The icon now steps aside.
+- **Full time (board 598):** the "last check" line broke in the middle of the time ("26.11.2026, 14"); the minutes are back.
+- **ONE history area (board 599):** the second log tile is gone; history and log are one area, the history tile opens it.
+- **Settings sorted (board 599):** the language is now the first field of its own in the settings; the self-update statement and the installed version live in the "Self update" section instead of the header.
+
 ### v3.3.5 (unreleased, goes out with the release run)
 - **Window start without any console flash:** the starter `update-manager-gui.vbs` (wscript) builds the window directly.
 - **One history card:** the running session's history and the seven-day log share one field — the session on top under "This session", the days below.

@@ -370,6 +370,13 @@ update-manager/
 
 ## Changelog
 
+### v3.3.7 (unveröffentlicht, kommt mit dem Release-Lauf)
+- **Starter-Fehlalarm behoben (Tafel 596):** der Starter las die Kommandozeile des Fensters per WMI; bei einem ERHÖHTEN Fenster ist die für ihn unsichtbar (NULL), also meldete er Fehler, obwohl die Oberfläche längst offen war. Das Fenster schreibt jetzt seine Prozess-ID nach `C:\ProgramData\UpdateManager\gui.pid` und nimmt die Datei beim Schließen mit; der Starter prüft diese Kennung und wartet 30 statt 5 Sekunden.
+- **Ein Haken, nicht zwei (Tafel 597):** stand in der Ergebniskarte als Zahl ein Haken (Nachsehen, oder Lauf ohne Updates), erschien daneben noch einmal das Symbol in Hakenform. Das Symbol tritt jetzt zurück.
+- **Volle Uhrzeit (Tafel 598):** „Zuletzt geprüft" brach mitten in der Uhrzeit ab („26.11.2026, 14"); die Minuten stehen wieder drin.
+- **EIN Bereich Verlauf (Tafel 599):** die zweite Protokoll-Kachel ist weg; Verlauf und Protokoll sind ein Bereich, die Verlauf-Kachel öffnet ihn.
+- **Einstellungen sortiert (Tafel 599):** die Sprache steht jetzt als erstes eigenes Feld in den Einstellungen; Selbst-Update-Aussage und installierte Fassung gehören in den Bereich „Selbst-Update" statt in den Kopf.
+
 ### v3.3.5 (unveröffentlicht, kommt mit dem Release-Lauf)
 - **Fensterstart ganz ohne Konsole:** der Starter `update-manager-gui.vbs` (wscript) baut das Fenster direkt.
 - **Eine Karte Verlauf:** der Verlauf der laufenden Sitzung und das Sieben-Tage-Protokoll liegen in einem Feld: die Sitzung oben als Abschnitt „Diese Sitzung", darunter die Tage.

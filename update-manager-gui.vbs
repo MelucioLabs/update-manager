@@ -52,7 +52,7 @@
 ' UTF-8 - the German message texts carry the umlauts as single bytes.
 Option Explicit
 
-Dim fso, wsShell, ordner, guiPfad, logPfad, starterLogPfad
+Dim fso, wsShell, ordner, guiPfad, logPfad, starterLogPfad, pidDatei
 
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set wsShell = CreateObject("WScript.Shell")
@@ -66,6 +66,8 @@ logPfad = fso.BuildPath(wsShell.ExpandEnvironmentStrings("%ProgramData%"), _
 ' The fallback for log lines the main log cannot take (ACL, see above).
 starterLogPfad = fso.BuildPath(fso.GetParentFolderName(logPfad), _
     "starter-fehler.log")
+pidDatei = fso.BuildPath(wsShell.ExpandEnvironmentStrings("%ProgramData%"), _
+    "UpdateManager\gui.pid")
 
 Sub Misslinge(nachricht)
     ' Same failure channel as the .bat: log line first, visible message
@@ -105,11 +107,44 @@ End If
 ' SCHON OFFEN (Feldtest 26.11.2026): Ein Doppelklick auf die Verknuepfung bei
 ' offenem Manager startete sonst einen zweiten Versuch samt zweiter
 ' Rechte-Frage. Wem der Manager schon offen ist, braucht keinen zweiten Start.
-Dim wmi, laeuftSchon
+Dim wmi
 Set wmi = GetObject("winmgmts:root\cimv2")
-laeuftSchon = (wmi.ExecQuery( _
-    "SELECT ProcessId FROM Win32_Process WHERE CommandLine LIKE '%update-manager-gui.ps1%'").Count > 0)
-If laeuftSchon Then WScript.Quit 0
+
+' ECHTES SIGNAL statt Kommandozeilen-Abfrage (Feldtest 26.11.2026, Fehlalarm
+' im Starter-Dialog): WMI liest die Kommandozeile ERHOEHTER Prozesse aus
+' einem normalen Aufruf als NULL - die alte LIKE-Abfrage fand das laufende
+' Fenster nie und meldete Fehler, woehrend die Oberflaeche schon offen war.
+' Die Oberflaeche schreibt ihre Prozess-ID nach ProgramData\UpdateManager\
+' gui.pid und nimmt die Datei beim Schliessen wieder mit; hier wird die
+' Datei gelesen und die PID per WMI geprueft (Prozessliste und Name bleiben
+' auch bei Erhoehung sichtbar).
+Function GuiLaeuft
+    GuiLaeuft = False
+    If Not fso.FileExists(pidDatei) Then Exit Function
+    Dim txt, pid, probe, p
+    On Error Resume Next
+    Set txt = fso.OpenTextFile(pidDatei, 1, False)
+    If Err.Number <> 0 Then
+        Err.Clear
+        On Error GoTo 0
+        Exit Function
+    End If
+    pid = Trim(txt.ReadLine)
+    txt.Close
+    If pid = "" Or Not IsNumeric(pid) Then
+        Err.Clear
+        On Error GoTo 0
+        Exit Function
+    End If
+    Set probe = wmi.ExecQuery("SELECT ProcessId, Name FROM Win32_Process WHERE ProcessId = " & pid)
+    For Each p In probe
+        If LCase(p.Name) = "powershell.exe" Then GuiLaeuft = True
+    Next
+    Err.Clear
+    On Error GoTo 0
+End Function
+
+If GuiLaeuft Then WScript.Quit 0
 
 Dim shellAnwendung
 On Error Resume Next
@@ -134,10 +169,15 @@ If Err.Number <> 0 Then
 End If
 On Error GoTo 0
 
-Dim abfrage, treffer, uhr, harteGrenze, frageOffen
+Dim uhr, harteGrenze, frageOffen, erschienen
 uhr = Timer
 harteGrenze = uhr + 120
 frageOffen = False
+erschienen = False
+' 30 Sekunden statt 5 (Feldtest 26.11.2026): nach der Rechte-Frage bootet
+' PowerShell, laedt WPF und baut das Fenster auf; im Feld dauert das bis
+' weit ueber fuenf Sekunden. Waehrend die Rechte-Frage offen steht, wird
+' weiter gewartet, bis zu 2 Minuten hartes Limit.
 Do
     WScript.Sleep 500
     frageOffen = (wmi.ExecQuery("SELECT ProcessId FROM Win32_Process WHERE Name='consent.exe'").Count > 0)
@@ -145,13 +185,13 @@ Do
         uhr = Timer
         harteGrenze = uhr + 120
     End If
-    Set abfrage = wmi.ExecQuery( _
-        "SELECT ProcessId FROM Win32_Process WHERE CommandLine LIKE '%update-manager-gui.ps1%'")
-    treffer = abfrage.Count
-    If treffer > 0 Then Exit Do
-Loop While Timer < uhr + 5 And Timer < harteGrenze
+    If GuiLaeuft Then
+        erschienen = True
+        Exit Do
+    End If
+Loop While Timer < uhr + 30 And Timer < harteGrenze
 
-If treffer > 0 Then WScript.Quit 0
+If erschienen Then WScript.Quit 0
 
 If frageOffen Then
     ' Die harte Grenze ist erreicht, die Rechte-Frage steht aber noch: Nicht
@@ -161,6 +201,6 @@ If frageOffen Then
         "die Oberflaeche; sonst einfach erneut starten."
 End If
 
-Misslinge "Die Oberflaeche erschien nicht (5 Sekunden gewartet). Meist wurde " & _
+Misslinge "Die Oberflaeche erschien nicht (30 Sekunden gewartet). Meist wurde " & _
     "die Rechte-Frage abgelehnt oder verweigert: neu starten und die Frage " & _
     "mit Ja beantworten."

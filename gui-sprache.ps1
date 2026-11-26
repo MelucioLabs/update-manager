@@ -56,10 +56,8 @@ $script:GuiTabelleDe = @{
     "sitz_kopf"              = "Diese Sitzung"
     "verlauf_zeitraum"       = "Sitzung und sieben Tage"
     "protokoll"              = "Protokoll"
-    "protokoll_zeitraum"     = "Sieben Tage"
     "einstellungen_umschalten" = "Einstellungen ein- oder ausblenden"
     "verlauf_umschalten"     = "Verlauf ein- oder ausblenden"
-    "protokoll_umschalten"   = "Protokoll ein- oder ausblenden"
     "live_ausgabe"           = "Live-Ausgabe"
 
     # Ergebniskarte
@@ -122,6 +120,7 @@ $script:GuiTabelleDe = @{
 
     # Selbst-Update-Karte
     "selbst_titel"           = "Selbst-Update"
+    "selbst_version_format"  = "Installierte Fassung: {0}"
     "schalter_selbst_pruefen" = "Nach neuer Fassung suchen (GitHub, höchstens einmal am Tag)"
     "selbst_ohne_signatur"   = "Installieren nach dem Laden bleibt ausgeschaltet, solange das Setup nicht signiert ist (CODE-SIGNING-POLICY.md). Der Manager zeigt dann nur den Hinweis auf eine neue Fassung."
     "sprache_label"          = "Sprache"
@@ -200,10 +199,8 @@ $script:GuiTabelleEn = @{
     "sitz_kopf"              = "This session"
     "verlauf_zeitraum"       = "Session and seven days"
     "protokoll"              = "Log"
-    "protokoll_zeitraum"     = "Seven days"
     "einstellungen_umschalten" = "Show or hide the settings"
     "verlauf_umschalten"     = "Show or hide the history"
-    "protokoll_umschalten"   = "Show or hide the log"
     "live_ausgabe"           = "Live output"
 
     # Result card
@@ -266,6 +263,7 @@ $script:GuiTabelleEn = @{
 
     # Self update card
     "selbst_titel"           = "Self update"
+    "selbst_version_format"  = "Installed version: {0}"
     "schalter_selbst_pruefen" = "Look for a new version (GitHub, at most once a day)"
     "selbst_ohne_signatur"   = "Installing after download stays off while the setup is unsigned (CODE-SIGNING-POLICY.md). The manager then only shows the notice of a new version."
     "sprache_label"          = "Language"

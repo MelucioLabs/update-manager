@@ -734,14 +734,16 @@ if (Test-Path $Gui) {
         Schlecht 'Sitzungs-Abschnitt fehlt oder ist fest vermauert (kein Tageskopf-Trenner)'
     }
 
-    # Verlauf- und Protokoll-Kachel oeffnen dieselbe_ansicht (einmal zu sein):
-    # gebuendet in einem Binding, das auf Zeige-Details schaltet.
-    $gemeinsam5e = $guiText5e -match [regex]::Escape("'KachelVerlauf', 'KachelProtokolle'") -and
-        $guiText5e -match '(?s)foreach \(\$k in @\(.{0,40}KachelProtokolle.{0,80}Zeige-Details'
+    # EINE Verlauf-Kachel (Feldtest 596-599, 26.11.2026): Verlauf und
+    # Protokoll sind ein Bereich; eine zweite Protokoll-Kachel gibt es
+    # nicht mehr. Der Aufruf schaltet Zeige-Details.
+    $gemeinsam5e = $guiText5e -match [regex]::Escape('$E.KachelVerlauf.Add_Click') -and
+        $guiText5e -match '(?s)KachelVerlauf\.Add_Click.{0,120}Zeige-Details' -and
+        $guiText5e -notmatch 'KachelProtokolle'
     if ($gemeinsam5e) {
-        Melde 'ok' 'Verlauf- und Protokoll-Kachel oeffnen dieselbe eine Ansicht'
+        Melde 'ok' 'EINE Verlauf-Kachel oeffnet den einen Bereich (Verlauf und Protokoll); keine zweite Protokoll-Kachel'
     } else {
-        Schlecht 'Kacheln Verlauf/Protokoll oeffnen nicht dieselbe Ansicht (Zeige-Details)'
+        Schlecht 'Verlauf-Kachel fehlt, oeffnet nicht Zeige-Details, oder eine zweite Protokoll-Kachel lebt noch'
     }
 
     # Keine laufende Statistik mehr auf den Kacheln (XAML-Platzhalter oder
@@ -753,10 +755,10 @@ if (Test-Path $Gui) {
     } else {
         Schlecht "Kacheln zaehlen noch: $($statistik5e -join ', ')"
     }
-    if ($guiText5e -match '__T_einstellungen_titel__' -and $guiText5e -match '__T_protokoll_zeitraum__') {
-        Melde 'ok' "'Einstellungen' steht auf der Einstellungen-Kachel (statt '5 von 5')"
+    if ($guiText5e -match '__T_einstellungen_titel__' -and $guiText5e -match '__T_verlauf_zeitraum__') {
+        Melde 'ok' "'Einstellungen' steht auf der Einstellungen-Kachel; die Verlauf-Kachel nennt den ganzen Zeitraum (verlauf_zeitraum)"
     } else {
-        Schlecht 'Einstellungen-Kachel traegt nicht ihren Namen (einstellungen_titel) oder die Protokoll-Kachel keinen Zeitraum (protokoll_zeitraum)'
+        Schlecht 'Einstellungen-Kachel traegt nicht ihren Namen (einstellungen_titel) oder die Verlauf-Kachel keinen Zeitraum (verlauf_zeitraum)'
     }
 }
 
@@ -874,6 +876,29 @@ if ($vbsDa) {
     }
 } else {
     Schlecht 'der Starter update-manager-gui.vbs fehlt - der Start geht wieder durch ein .bat-Konsolenfenster'
+}
+
+# Kennungs-Kette Starter gegen Oberflaeche (Feldtest 26.11.2026, Bild 143):
+# WMI liest die Kommandozeile eines ERHOEHTEN Fensters als nicht erhöhter
+# Aufrufer nicht (CommandLine = NULL); der alte Starter meldete deshalb
+# Fehlalarm, waehrend die Oberflaeche laengst offen war. Jetzt schreibt die
+# Oberflaeche vor ShowDialog ihre PID nach ProgramData\UpdateManager\gui.pid
+# und nimmt die Datei beim Schliessen mit (Add_Closed plus finally); der
+# Starter liest sie und prueft die PID per WMI.
+if (Test-Path $Vbs) {
+    $vbsText5h2 = [System.Text.Encoding]::GetEncoding(1252).GetString([System.IO.File]::ReadAllBytes($Vbs))
+    $guiText5h2 = Get-Content $Gui -Raw
+    $kennung5h = ($vbsText5h2 -match 'gui\.pid') -and
+        ($vbsText5h2 -match 'GuiLaeuft') -and
+        ($vbsText5h2 -notmatch "CommandLine LIKE '%update-manager-gui") -and
+        ($guiText5h2 -match 'Schreibe-GuiKennung') -and
+        ($guiText5h2 -match 'Add_Closed\(\{ Entferne-GuiKennung \}\)') -and
+        ($guiText5h2 -match '(?s)Schreibe-GuiKennung\r?\ntry \{\r?\n    \[void\]\$fenster\.ShowDialog')
+    if ($kennung5h) {
+        Melde 'ok' 'Starter erkennt das erhoehte Fenster ueber die PID-Kennung (gui.pid), nicht mehr ueber die unlesbare Kommandozeile'
+    } else {
+        Schlecht 'Kennungs-Kette Starter/Oberflaeche gebrochen (gui.pid wird nicht beidseitig gefuehrt oder Kommandozeilen-Abfrage lebt noch)'
+    }
 }
 
 # Der Installer muss denselben Weg fahren: Verknuepfungen und der

@@ -119,6 +119,14 @@ $SelbstUpdateOrdner  = Join-Path $env:ProgramData 'UpdateManager\setup'
 # selbst-update.json: kleine Maschine-Sache in ProgramData, nicht im Ordner
 # neben den Skripten.
 $PruefstandDatei = Join-Path $env:ProgramData 'UpdateManager\pruefstand.json'
+# Kennung des laufenden Fensters (Feldtest 26.11.2026, Punkt 1): Der Starter
+# (.vbs) fragt sonst die Kommandozeile per WMI ab; bei einem ERHOEHTEN
+# Fenster liest er die als nicht erhöhter Prozess nicht (CommandLine = NULL),
+# wartete vergebens und meldete Fehler, waehrend das Fenster längst offen
+# war. Hier schreibt die Oberflaeche selbst ihre Prozess-ID hin und nimmt
+# die Datei beim Schließen mit; der Starter liest sie und prueft die PID
+# (die bleibt auch bei erhoehten Prozessen sichtbar).
+$GuiPidDatei = Join-Path $env:ProgramData 'UpdateManager\gui.pid'
 # Protokoll-Ansicht (protokoll-ansicht.ps1): reine Funktionen. Fehlt die Datei,
 # bleibt die Karte bei "Wird gelesen" und das Protokoll oeffnet wie frueher.
 $AnsichtDatei   = Join-Path $SkriptOrdner 'protokoll-ansicht.ps1'
@@ -462,13 +470,6 @@ $xamlText = @'
              er etwas getan hat oder seit Wochen scheitert. -->
         <TextBlock x:Name="TxtLetzterLauf" Text="" FontSize="12"
                    Foreground="{StaticResource SchriftLei}" Margin="0,3,0,0" TextWrapping="Wrap"/>
-        <!-- Statuszeile der Selbst-Update-Pruefung (Davids Wunsch, 25.11.2026):
-             Sagt das Ergebnis der Tagespruefung und, dass nichts von selbst
-             installiert wird. Sichtbar ist sie immer, sobald geprueft wurde
-             oder die Pruefung ausgeschaltet ist; zeigt sie die Zeile mit der
-             neuen Fassung, tritt sie zurueck. -->
-        <TextBlock x:Name="TxtSelbstUpdate" Text="" FontSize="12"
-                   Foreground="{StaticResource SchriftLei}" Margin="0,3,0,0" TextWrapping="Wrap"/>
         <!-- Zuletzt geprueft (Feldtest 26.11.2026): jede beendete Pruefung,
              auch die automatische beim Oeffnen, schreibt ihren Stand hier
              hinein. Ungeprueft steht die Zeile nicht da. -->
@@ -503,7 +504,7 @@ $xamlText = @'
          Weitere steht unter "Details". Farbe und Zeichen tragen zusammen. -->
     <Grid Margin="0,0,0,10">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
       </Grid.ColumnDefinitions>
       <Border x:Name="KarteErgebnis" Grid.Column="0" Background="{StaticResource Karte}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
               CornerRadius="12" Margin="0,0,10,0" MinHeight="96">
@@ -529,22 +530,15 @@ $xamlText = @'
           <TextBlock Text="__T_quellen_aktiv__" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
         </StackPanel>
       </Button>
-      <Button x:Name="KachelVerlauf" Grid.Column="2" Style="{StaticResource Kachel}" Margin="0,0,10,0"
+      <Button x:Name="KachelVerlauf" Grid.Column="2" Style="{StaticResource Kachel}"
               AutomationProperties.Name="__T_verlauf_umschalten__">
         <StackPanel>
           <TextBlock Style="{StaticResource Symbol}" Text="&#xE81C;"/>
           <TextBlock Text="__T_verlauf__" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource Schrift}"/>
-          <!-- Tafel 584: one card, so the tile says the WHOLE range and not
-               only this session. -->
+          <!-- Tafel 584, Feldtest 596: ONE card for BOTH horizons, so the
+               tile row carries a single Verlauf tile; the log lives in the
+               same card, there is no second Protokolle tile. -->
           <TextBlock Text="__T_verlauf_zeitraum__" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
-        </StackPanel>
-      </Button>
-      <Button x:Name="KachelProtokolle" Grid.Column="3" Style="{StaticResource Kachel}"
-              AutomationProperties.Name="__T_protokoll_umschalten__">
-        <StackPanel>
-          <TextBlock Style="{StaticResource Symbol}" Text="&#xE8A5;"/>
-          <TextBlock Text="__T_protokoll__" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource Schrift}"/>
-          <TextBlock Text="__T_protokoll_zeitraum__" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
         </StackPanel>
       </Button>
     </Grid>
@@ -557,6 +551,25 @@ $xamlText = @'
     <!-- Die Schalter stehen vorbelegt auf "alles" und sind selten anzufassen:
          zu, bis jemand sie sucht. -->
     <StackPanel x:Name="PanelEinstellungen" Visibility="Collapsed" Margin="0,0,0,12">
+    <!-- Sprachwahl als ERSTES eigenes Feld der Einstellungen (Feldtest
+         26.11.2026, Punkt 5); der Rest der Einstellungen folgt darunter. -->
+    <Border Background="{StaticResource Karte}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
+            CornerRadius="12" Padding="20,14" Margin="0,8,0,0">
+      <StackPanel>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <TextBlock Text="__T_sprache_label__" FontSize="14" VerticalAlignment="Center" Foreground="{StaticResource Schrift}"/>
+          <Button x:Name="BtnSpracheDe" Style="{StaticResource KnopfLeise}" Margin="14,0,0,0" VerticalAlignment="Center">
+            <TextBlock Text="Deutsch"/>
+          </Button>
+          <Button x:Name="BtnSpracheEn" Style="{StaticResource KnopfLeise}" Margin="8,0,0,0" VerticalAlignment="Center">
+            <TextBlock Text="English"/>
+          </Button>
+        </StackPanel>
+        <TextBlock Text="__T_sprache_hinweis__" FontSize="12" Foreground="{StaticResource SchriftLei}"
+                   TextWrapping="Wrap" Margin="0,8,0,0"/>
+      </StackPanel>
+    </Border>
+
     <Border Background="{StaticResource Karte}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
             CornerRadius="12" Padding="20,14" Margin="0,8,0,0">
       <StackPanel>
@@ -602,32 +615,26 @@ $xamlText = @'
       </StackPanel>
     </Border>
 
-    <!-- Separater Punkt (Davids Wunsch, 25.11.2026): selbstUpdate.pruefen als
-         eigener Regler, mit der Klarheit, dass nichts von selbst installiert
-         wird. Zweiter Regler derselben Karte: die Sprache der Oberflaeche.
-         Installieren bekommt keinen Regler: ohne Signatur kein Auto-Install
+    <!-- Bereich Selbst-Update (Feldtest 26.11.2026, Punkt 5): die Aussage
+         der Tagespruefung und die installierte Fassung gehoeren HIERHER und
+         nicht mehr in den Kopf; sichtbar ist die Zeile, sobald geprueft
+         wurde oder die Pruefung ausgeschaltet ist; zeigt die Kopfzeile die
+         neue Fassung, tritt sie zurueck. Installieren bekommt keinen
+         Regler: ohne Signatur kein Auto-Install
          (CODE-SIGNING-POLICY.md). -->
     <Border Background="{StaticResource Karte}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
             CornerRadius="12" Padding="20,14" Margin="0,12,0,0">
       <StackPanel>
         <TextBlock Text="__T_selbst_titel__" FontSize="14" FontWeight="SemiBold"
                    Foreground="{StaticResource SchriftLei}" Margin="0,0,0,4"/>
+        <TextBlock x:Name="TxtSelbstUpdate" Text="" FontSize="12"
+                   Foreground="{StaticResource SchriftLei}" Margin="0,3,0,0" TextWrapping="Wrap"/>
+        <TextBlock x:Name="TxtSelbstVersion" Text="" FontSize="12"
+                   Foreground="{StaticResource SchriftLei}" Margin="0,3,0,0" TextWrapping="Wrap"/>
         <CheckBox x:Name="ChkSelbstPruefen" Style="{StaticResource Schalter}" Tag="&#xE895;" IsChecked="True"
                   Content="__T_schalter_selbst_pruefen__"/>
         <TextBlock Text="__T_selbst_ohne_signatur__" FontSize="12" Foreground="{StaticResource SchriftLei}"
                    TextWrapping="Wrap" Margin="0,4,0,0"/>
-        <Border Height="1" Background="{StaticResource Bahn}" Opacity="0.35" Margin="0,14,0,10"/>
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <TextBlock Text="__T_sprache_label__" FontSize="14" VerticalAlignment="Center" Foreground="{StaticResource Schrift}"/>
-          <Button x:Name="BtnSpracheDe" Style="{StaticResource KnopfLeise}" Margin="14,0,0,0" VerticalAlignment="Center">
-            <TextBlock Text="Deutsch"/>
-          </Button>
-          <Button x:Name="BtnSpracheEn" Style="{StaticResource KnopfLeise}" Margin="8,0,0,0" VerticalAlignment="Center">
-            <TextBlock Text="English"/>
-          </Button>
-        </StackPanel>
-        <TextBlock Text="__T_sprache_hinweis__" FontSize="12" Foreground="{StaticResource SchriftLei}"
-                   TextWrapping="Wrap" Margin="0,8,0,0"/>
       </StackPanel>
     </Border>
     </StackPanel>
@@ -843,11 +850,11 @@ foreach ($name in @('TxtHardware','TxtLetzterLauf','LinkMelucio','ChkWinget','Ch
                     'ZeileNeueFassung','TxtNeueFassung','LinkNeueFassung','TxtLinkSeite','LinkUpdateSeite',
                     'BtnNeueFassung','BtnFassungSpaeter',
                     'PanelEinstellungen','KarteErgebnis','StreifenErgebnis','TxtZahl','TxtErgebnis','TxtErgebnisZeit','PanelDetails',
-                    'TxtIconErgebnis','KachelEinstellungen','KachelVerlauf','KachelProtokolle','TxtBtnFilterFehler',
+                    'TxtIconErgebnis','KachelEinstellungen','KachelVerlauf','TxtBtnFilterFehler',
                     'BtnFilterAlles','BtnFilterFehler',
                     'PanelVerlauf', 'RtfProtokoll',
                     'ChkSelbstPruefen', 'BtnSpracheDe', 'BtnSpracheEn', 'TxtSelbstUpdate', 'TxtBtnStart',
-                    'TxtLetztePruefung')) {
+                    'TxtLetztePruefung', 'TxtSelbstVersion')) {
     $E[$name] = $fenster.FindName($name)
     if ($null -eq $E[$name]) { throw "Element fehlt im XAML: $name" }
 }
@@ -862,6 +869,8 @@ $E.ChkWindows.IsChecked = $GuiKonfig.Quellen['windowsUpdate']
 $E.ChkStore.IsChecked = $GuiKonfig.Quellen['microsoftStore']
 $E.ChkTreiber.IsChecked = $GuiKonfig.Quellen['treiber']
 $E.ChkSelbstPruefen.IsChecked = $GuiKonfig.Pruefung
+# Fassungsangabe im Bereich Selbst-Update (Feldtest 26.11.2026, Punkt 5).
+$E.TxtSelbstVersion.Text = ($T['selbst_version_format'] -f $UpdaterVersion)
 
 # Verlauf dieser Sitzung (Tafel 584): die Zeilen sammeln sich hier; die
 # zusammengelegte Karte zeigt sie als obersten Abschnitt "Diese Sitzung".
@@ -931,7 +940,7 @@ function Setze-Beschaeftigt {
                               else           { $fenster.FindResource('SchriftLei') }
     foreach ($n in @('BtnStart','BtnPruefen','BtnProtokoll','BtnSchliessen','BtnZeit',
                      'BtnFilterAlles','BtnFilterFehler','TxtZeit',
-                     'KachelEinstellungen','KachelVerlauf','KachelProtokolle',
+                     'KachelEinstellungen','KachelVerlauf',
                      'ChkWinget','ChkChoco','ChkWindows','ChkStore','ChkTreiber',
                      'ChkSelbstPruefen','BtnSpracheDe','BtnSpracheEn',
                      'BtnNeueFassung','BtnFassungSpaeter')) {
@@ -1282,6 +1291,22 @@ function Schreibe-Pruefstand {
     } catch { }
 }
 
+# Kennung schreiben und wegnehmen: Nur das echte Fenster (vor ShowDialog)
+# meldet sich; Werkstattlaeufe (-NurPruefen, -Abbild, -Selbsttest) enden,
+# bevor sie hier ankommen. Add_Closed raeumt normal auf, das finally
+# darueber auch bei einem Abbruch ausnahmsweise.
+function Schreibe-GuiKennung {
+    try {
+        $ordner = Split-Path $GuiPidDatei
+        if (-not (Test-Path $ordner)) { New-Item -ItemType Directory -Force -Path $ordner | Out-Null }
+        Set-Content -LiteralPath $GuiPidDatei -Value $PID -Encoding ASCII
+    } catch { }
+}
+function Entferne-GuiKennung {
+    try { if (Test-Path -LiteralPath $GuiPidDatei) { Remove-Item -LiteralPath $GuiPidDatei -Force } } catch { }
+}
+$fenster.Add_Closed({ Entferne-GuiKennung })
+
 function Zeige-LetztePruefung {
     try {
         $stand = $null
@@ -1289,8 +1314,10 @@ function Zeige-LetztePruefung {
             $stand = Get-Content -LiteralPath $PruefstandDatei -Raw -Encoding UTF8 | ConvertFrom-Json
         }
         if ($stand -and "$($stand.zeit)") {
-            if ("$($stand.zeit)" -match '^(\d{4})-(\d\d)-(\d\d) (\d\d):\d\d$') {
-                $wann = "{0}.{1}.{2}, {3}" -f $Matches[3], $Matches[2], $Matches[1], $Matches[4]
+            # Feldtest 26.11.2026 (Bild 598): ohne die Minuten-Gruppe stand
+            # dort "26.11.2026, 14" und brach mitten in der Uhrzeit ab.
+            if ("$($stand.zeit)" -match '^(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d)$') {
+                $wann = "{0}.{1}.{2}, {3}:{4}" -f $Matches[3], $Matches[2], $Matches[1], $Matches[4], $Matches[5]
                 $E.TxtLetztePruefung.Text = ($T['letzte_pruefung_format'] -f $wann)
             } else {
                 $E.TxtLetztePruefung.Text = ($T['letzte_pruefung_format'] -f "$($stand.zeit)")
@@ -1407,11 +1434,9 @@ $E.KachelEinstellungen.Add_Click({
     $E.PanelEinstellungen.Visibility = if ($E.PanelEinstellungen.Visibility -eq 'Visible') { 'Collapsed' } else { 'Visible' }
     Aktualisiere-Kacheln
 })
-foreach ($k in @('KachelVerlauf', 'KachelProtokolle')) {
-    $E[$k].Add_Click({
-        if (Details-Offen) { Zeige-Details $false } else { Zeige-Details $true }
-    })
-}
+$E.KachelVerlauf.Add_Click({
+    if (Details-Offen) { Zeige-Details $false } else { Zeige-Details $true }
+})
 foreach ($c in @($E.ChkWinget, $E.ChkChoco, $E.ChkWindows, $E.ChkStore, $E.ChkTreiber)) { $c.Add_Click({ Aktualisiere-Kacheln; Speichere-GuiEinstellungen }) }
 
 # Davids Regler (25.11.2026): selbstUpdate.pruefen an/aus, gespeichert in der
@@ -1636,7 +1661,6 @@ function Aktualisiere-Kacheln {
     $rahmen = @{
         KachelEinstellungen = ($E.PanelEinstellungen.Visibility -eq 'Visible')
         KachelVerlauf       = (Details-Offen)
-        KachelProtokolle    = (Details-Offen)
     }
     foreach ($k in $rahmen.Keys) {
         # Der Rahmen steckt in der Vorlage; die Stellung zeigt die Hintergrundfarbe.
@@ -1654,6 +1678,11 @@ function Zeige-Ergebnis {
     $glyph = switch ($Ton) { 'gut' { 0xE73E } 'warn' { 0xE7BA } 'schlecht' { 0xE783 } default { 0xE895 } }
     $E.TxtIconErgebnis.Text = [string][char]$glyph
     $E.TxtIconErgebnis.Foreground = $pinsel
+    # Feldtest 26.11.2026 (Bild 144): steht in der grossen Zahl selbst ein
+    # Haken (Nachsehen, oder Lauf ohne Updates), steht sonst daneben noch
+    # einmal das Symbol in derselben Form: zwei Haekchen uebereinander. Das
+    # Symbol tritt dann zurueck, der Haken bleibt einfach da.
+    $E.TxtIconErgebnis.Visibility = if ($Zahl -eq [string][char]0x2713) { 'Collapsed' } else { 'Visible' }
     $E.StreifenErgebnis.Background = $pinsel
     $E.TxtErgebnis.Text = $Satz
     $E.TxtErgebnisZeit.Text = $Zeit
@@ -2144,4 +2173,12 @@ if ($NurPruefen) {
 Markiere-Knopf $E.BtnSpracheDe ($Sprache -eq 'de')
 Markiere-Knopf $E.BtnSpracheEn ($Sprache -eq 'en')
 
-[void]$fenster.ShowDialog()
+# Kennung VOR dem Oeffnen schreiben: Der Starter wartet genau auf dieses
+# Zeichen, nicht auf eine Kommandozeile, die er bei Erhoehung nicht lesen
+# darf (Feldtest 26.11.2026, Punkt 1).
+Schreibe-GuiKennung
+try {
+    [void]$fenster.ShowDialog()
+} finally {
+    Entferne-GuiKennung
+}
