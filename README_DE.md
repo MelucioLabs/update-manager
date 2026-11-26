@@ -373,6 +373,10 @@ update-manager/
 ### v3.3.5 (unveröffentlicht, kommt mit dem Release-Lauf)
 - **Fensterstart ganz ohne Konsole:** der Starter `update-manager-gui.vbs` (wscript) baut das Fenster direkt.
 - **Eine Karte Verlauf:** der Verlauf der laufenden Sitzung und das Sieben-Tage-Protokoll liegen in einem Feld: die Sitzung oben als Abschnitt „Diese Sitzung", darunter die Tage.
+- **Proaktive Prüfung (Feldtest 26.11.2026):** beim Öffnen sieht der Manager einmal selbst nach, ob Updates anstehen (ohne nichts zu installieren); der Kopf sagt seitdem auch, wann zuletzt geprüft wurde.
+- **Knopfdruck ins Protokoll (Feldtest 26.11.2026):** Aktualisieren und Nachsehen klappen die Protokollansicht sofort auf, der Lauf ist damit sichtbar.
+- **Schließen während eines Laufs (Feldtest 26.11.2026):** der alte Schlusshänger trat auf, solange der Hintergrundlauf noch lief; das Fenster schließt jetzt sofort und räumt den ganzen Prozessbaum des Laufs ab.
+- **Weißes Symbol beim Herunterladen:** das Setup trägt Symbol und Versionsinfo; solange es nicht signiert ist, wertet Windows die Datei nach dem Download erst spät aus und zeigt kurz ein weißes Blatt. Erst die Signatur (SignPath, in Vorbereitung) hebt das dauerhaft auf.
 
 ### v3.3.4 (25.11.2026)
 - **GUI-Starter:** die Administratorerhöhung läuft über `-Command` mit `&` statt `-File`.

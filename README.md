@@ -311,6 +311,10 @@ update-manager/
 ### v3.3.5 (unreleased, goes out with the release run)
 - **Window start without any console flash:** the starter `update-manager-gui.vbs` (wscript) builds the window directly.
 - **One history card:** the running session's history and the seven-day log share one field — the session on top under "This session", the days below.
+- **Proactive check (field test 2026-11-26):** on open, the manager looks for pending updates once on its own (nothing is installed); the header now also says when the last check ran.
+- **Click opens the log (field test 2026-11-26):** Update and the check button expand the log view immediately, so the run is visible.
+- **Closing during a run (field test 2026-11-26):** the old close hang only occurred while a background run was still going; the window now closes immediately and tears down the whole process tree of the run.
+- **White icon after download:** the setup carries icon and version info; while it is unsigned, Windows evaluates the file late after a download and briefly shows a blank sheet. The planned signature (SignPath) fixes this for good.
 
 ### v3.3.4 (2026-11-25)
 - **GUI starter:** admin elevation via `-Command` with `&` instead of `-File`.

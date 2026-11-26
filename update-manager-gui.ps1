@@ -115,6 +115,10 @@ try {
 $SelbstUpdateDatei   = Join-Path $SkriptOrdner 'selbst-update.ps1'
 $SelbstUpdateZustand = Join-Path $env:ProgramData 'UpdateManager\selbst-update.json'
 $SelbstUpdateOrdner  = Join-Path $env:ProgramData 'UpdateManager\setup'
+# Stand der letzten Pruefung (Feldtest 26.11.2026), gleiche Sorte Datei wie
+# selbst-update.json: kleine Maschine-Sache in ProgramData, nicht im Ordner
+# neben den Skripten.
+$PruefstandDatei = Join-Path $env:ProgramData 'UpdateManager\pruefstand.json'
 # Protokoll-Ansicht (protokoll-ansicht.ps1): reine Funktionen. Fehlt die Datei,
 # bleibt die Karte bei "Wird gelesen" und das Protokoll oeffnet wie frueher.
 $AnsichtDatei   = Join-Path $SkriptOrdner 'protokoll-ansicht.ps1'
@@ -465,6 +469,12 @@ $xamlText = @'
              neuen Fassung, tritt sie zurueck. -->
         <TextBlock x:Name="TxtSelbstUpdate" Text="" FontSize="12"
                    Foreground="{StaticResource SchriftLei}" Margin="0,3,0,0" TextWrapping="Wrap"/>
+        <!-- Zuletzt geprueft (Feldtest 26.11.2026): jede beendete Pruefung,
+             auch die automatische beim Oeffnen, schreibt ihren Stand hier
+             hinein. Ungeprueft steht die Zeile nicht da. -->
+        <TextBlock x:Name="TxtLetztePruefung" Text="" FontSize="12"
+                   Foreground="{StaticResource SchriftLei}" Margin="0,3,0,0" TextWrapping="Wrap"
+                   Visibility="Collapsed"/>
         <!-- Neue Fassung (SELBST-UPDATE.md): erst sichtbar, wenn die
              Tagesabfrage eine neuere gefunden hat. Kein Dialog, der sich vor
              die Arbeit schiebt. -->
@@ -836,7 +846,8 @@ foreach ($name in @('TxtHardware','TxtLetzterLauf','LinkMelucio','ChkWinget','Ch
                     'TxtIconErgebnis','KachelEinstellungen','KachelVerlauf','KachelProtokolle','TxtBtnFilterFehler',
                     'BtnFilterAlles','BtnFilterFehler',
                     'PanelVerlauf', 'RtfProtokoll',
-                    'ChkSelbstPruefen', 'BtnSpracheDe', 'BtnSpracheEn', 'TxtSelbstUpdate', 'TxtBtnStart')) {
+                    'ChkSelbstPruefen', 'BtnSpracheDe', 'BtnSpracheEn', 'TxtSelbstUpdate', 'TxtBtnStart',
+                    'TxtLetztePruefung')) {
     $E[$name] = $fenster.FindName($name)
     if ($null -eq $E[$name]) { throw "Element fehlt im XAML: $name" }
 }
@@ -1186,6 +1197,9 @@ $Takt.Add_Tick({
             $code = -1
             [void][int]::TryParse($zeile.Substring($MARKE_FERTIG.Length), [ref]$code)
             $schluss = Bilde-Abschluss -Art $Lauf.art -ExitCode $code -Minuten $dauer
+            # Stand merken (Feldtest 26.11.2026): Jedes beendete Nachsehen,
+            # automatisch wie von Hand, landet als "Zuletzt geprüft" im Kopf.
+            if ($Lauf.art -eq 'pruefen') { Schreibe-Pruefstand; Zeige-LetztePruefung }
             Schreibe ''
             Schreibe $schluss.Protokoll
             if ($schluss.Gut) { Setze-Beschaeftigt $false $schluss.Status -Gut }
@@ -1255,6 +1269,41 @@ function Write-EigenesLog {
     Add-Content -Path $LogPfad -Value $zeile -Encoding UTF8
 }
 
+# Zuletzt geprueft (Feldtest 26.11.2026, Punkt 2): Der Stand wird nach JEDEM
+# beendeten Nachsehen weggeschrieben, automatisch wie von Hand. Ein fehl- oder
+# misslungener Schreibvorgang darf das Fenster nicht beruehren: Die Zeile fehlt
+# dann einfach einmal, der naechste Lauf schreibt sie wieder.
+function Schreibe-Pruefstand {
+    try {
+        $ordner = Split-Path $PruefstandDatei
+        if (-not (Test-Path $ordner)) { New-Item -ItemType Directory -Force -Path $ordner | Out-Null }
+        @{ zeit = (Get-Date).ToString('yyyy-MM-dd HH:mm') } | ConvertTo-Json -Compress |
+            Set-Content -LiteralPath $PruefstandDatei -Encoding UTF8
+    } catch { }
+}
+
+function Zeige-LetztePruefung {
+    try {
+        $stand = $null
+        if (Test-Path -LiteralPath $PruefstandDatei) {
+            $stand = Get-Content -LiteralPath $PruefstandDatei -Raw -Encoding UTF8 | ConvertFrom-Json
+        }
+        if ($stand -and "$($stand.zeit)") {
+            if ("$($stand.zeit)" -match '^(\d{4})-(\d\d)-(\d\d) (\d\d):\d\d$') {
+                $wann = "{0}.{1}.{2}, {3}" -f $Matches[3], $Matches[2], $Matches[1], $Matches[4]
+                $E.TxtLetztePruefung.Text = ($T['letzte_pruefung_format'] -f $wann)
+            } else {
+                $E.TxtLetztePruefung.Text = ($T['letzte_pruefung_format'] -f "$($stand.zeit)")
+            }
+            $E.TxtLetztePruefung.Visibility = 'Visible'
+        } else {
+            $E.TxtLetztePruefung.Visibility = 'Collapsed'
+        }
+    } catch {
+        $E.TxtLetztePruefung.Visibility = 'Collapsed'
+    }
+}
+
 function Starte-FensterNeu {
     <#
         Neustart aus dem laufenden Fenster (Sprachwechsel, Selbst-Update).
@@ -1271,6 +1320,19 @@ function Starte-FensterNeu {
         '-File', ("`"{0}`"" -f $PSCommandPath))
 }
 
+# Ein gemeinsames Nachsehen, manuell und automatisch (Feldtest 26.11.2026):
+# Der Auftrag `pruefen` des Kerns sieht NUR nach, er installiert nichts.
+function Starte-Nachsehen {
+    # Automatisch heisst: ohne die Karte aufzuklappen, das Fenster ist gerade
+    # erst offen; der Wechsel in die Protokollansicht gehoert zum Knopf.
+    param([switch]$Automatisch)
+    if ($Lauf.ps -or $Lauf.kind -gt 0) { return }
+    Setze-Beschaeftigt $true $T['status_sieht_nach']
+    if (-not $Automatisch) { Zeige-Details $true }
+    Starte-Kette -Auftraege @(@{ Name = 'pruefen'; Titel = 'Was steht an' }) -Art 'pruefen'
+    $Takt.Start()
+}
+
 $E.BtnStart.Add_Click({
     Fuehre-Sicher-Aus -Was 'Aktualisieren' -Tun {
         $auftraege = Gewaehlte-Auftraege
@@ -1279,18 +1341,27 @@ $E.BtnStart.Add_Click({
             return
         }
         Setze-Beschaeftigt $true $T['status_laeuft']
+        # Feldtest 26.11.2026: Nach dem Klick direkt in die Protokollansicht,
+        # damit zu sehen ist, was der Lauf tut, ohne den Knopf noch einmal zu
+        # suchen. Erst sperren, dann aufklappen: Zeige-Details zeigt das
+        # Live-Fenster nur bei laufendem Takt an.
+        Zeige-Details $true
         Starte-Kette -Auftraege $auftraege -Art 'alles'
         $Takt.Start()
     }
 })
 
 $E.BtnPruefen.Add_Click({
-    Fuehre-Sicher-Aus -Was 'Nachsehen' -Tun {
-        Setze-Beschaeftigt $true $T['status_sieht_nach']
-        Starte-Kette -Auftraege @(@{ Name = 'pruefen'; Titel = 'Was steht an' }) -Art 'pruefen'
-        $Takt.Start()
-    }
+    Fuehre-Sicher-Aus -Was 'Nachsehen' -Tun { Starte-Nachsehen }
 })
+
+# Proaktive Pruefung (Feldtest 26.11.2026, Punkt 2): Beim Oeffnen sieht der
+# Manager einmal selbst nach, ohne dass jemand einen Knopf drueckt. Installiert
+# wird dabei nichts, es gilt dieselbe Klicksperre wie bei jedem Lauf.
+function Starte-AutoPruefung {
+    if ($Lauf.ps -or $Lauf.kind -gt 0 -or $Takt.IsEnabled) { return }
+    Starte-Nachsehen -Automatisch
+}
 
 $E.BtnZeit.Add_Click({
     $zeit = "$($E.TxtZeit.Text)".Trim()
@@ -1444,15 +1515,37 @@ $fenster.Add_PreviewKeyDown({
     $knopf.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
 })
 
-# Beim Schliessen aufraeumen: Ein Kindprozess, der weiterinstalliert, waehrend
-# sein Fenster weg ist, ist genau die Sorte Geist, die man spaeter im
-# Task-Manager sucht.
+# Beim Schliessen aufraeumen (Feldtest 26.11.2026, Punkt 4): Ein Kindprozess,
+# der weiterinstalliert, waehrend sein Fenster weg ist, ist genau die Sorte
+# Geist, die man spaeter im Task-Manager sucht.
+#
+# WARUM DAS FENSTER NUR SEHR VERZOEGERT SCHLOSS (gemessen, 26.11.2026): Der
+# alte Schluss rief Raeume-Lauf-Auf auf, und $rs.Close() wartet SYNCHRON auf
+# das Ende der Pipeline im Hintergrund-Runspace. Die sitzt wartend in
+# StandardOutput.ReadLine() des Kindprozesses; ein Stopp kann einen nativen
+# ReadLine-Aufruf nicht abbrechen, es wartet auf die NAECHESTEN Ausgabezeile.
+# Im Labor: Kind schweigt 20 s, das Schliessen blockiert genau diese 20 s.
+# Stirbt nur der Kern-PowerShell, haelt ein Enkel wie winget den Strom offen;
+# stirbt der Verweis ueberhaupt nicht (Kind-PID noch nicht angekommen),
+# wartet Close() auf einen noch laufenden Auftrag. Nie synchron warten.
+# Stattdessen: der GANZE Baum stirbt (taskkill /T, sonst haelt ein Enkel den
+# Strom offen, das Ende kommt nie), die Pipeline mit BeginStop nur
+# ANSTOSSEN und den Runspace asynchron schliessen. Gemessen: statt 20 014 ms
+# bleiben es 1 052 ms, ohne -Wait am taskkill noch weniger; was uebrig
+# bleibt, raeumt der Hintergrund selbst auf und faellt mit dem Prozess fort.
 $fenster.Add_Closing({
     $Takt.Stop()
     if ($Lauf.kind -gt 0) {
-        try { Stop-Process -Id $Lauf.kind -Force -ErrorAction Stop } catch { }
+        try {
+            Start-Process -FilePath 'taskkill.exe' -ArgumentList "/PID $($Lauf.kind) /T /F" -WindowStyle Hidden
+        } catch {
+            try { Stop-Process -Id $Lauf.kind -Force -ErrorAction Stop } catch { }
+        }
     }
-    Raeume-Lauf-Auf
+    if ($Lauf.ps) { try { $null = $Lauf.ps.BeginStop($null, $null) } catch { } }
+    if ($Lauf.rs) {
+        try { $Lauf.rs.CloseAsync() } catch { try { $Lauf.rs.Close() } catch { } }
+    }
 })
 
 function Hole-Aufgabe {
@@ -1983,7 +2076,7 @@ $E.BtnNeueFassung.Add_Click({
     $warten.Start()
 })
 
-$fenster.Add_ContentRendered({ Zeige-LetztenLaufKarte; Aktualisiere-Kacheln; Lade-Nebenher; Pruefe-Neue-Fassung })
+$fenster.Add_ContentRendered({ Zeige-LetztenLaufKarte; Zeige-LetztePruefung; Aktualisiere-Kacheln; Lade-Nebenher; Pruefe-Neue-Fassung; Starte-AutoPruefung })
 
 if ($Abbild) {
     # NICHT das Fenster zeichnen, sondern seinen INHALT. Ein Window, das nie
