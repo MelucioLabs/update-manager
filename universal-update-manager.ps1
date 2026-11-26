@@ -724,6 +724,27 @@ $ErrorActionPreference = "Continue"
 # ins Leere, und das Protokoll waere still verschwunden.
 $LogDir    = Join-Path $env:ProgramData "UpdateManager"
 $LogFile   = "$LogDir\universal-update-manager.log"
+
+# ENV-Validierung vor dem ersten Schritt: Ohne ProgramData und TEMP stimmt
+# keiner der Pfade unten, und der Lauf wuerde halb laufen und still enden.
+# Lieber laut abbrechen (Code 4) als still weiterlaufen.
+foreach ($n in 'ProgramData', 'TEMP') {
+    if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($n))) {
+        Write-Log "Umgebungsvariable $n ist nicht gesetzt - Abbruch." "ERROR"
+        exit 4
+    }
+}
+try {
+    # CommonApplicationData, nicht "ProgramData": Der Enum-Name von .NET
+    # kennt kein ProgramData (der Versuch wirft). $env:ProgramData bleibt
+    # die richtige Quelle fuer den Pfad, hier geht es nur um den Test.
+    [void][Environment]::GetFolderPath('CommonApplicationData')
+} catch {
+    # Ohne Write-Log (erst weiter unten definiert): laut und direkt.
+    Write-Host "ProgramData nicht erreichbar - Abbruch." -ForegroundColor Red
+    exit 4
+}
+
 # Der Name der geplanten Aufgabe steht an mehreren Stellen; eine
 # Umbenennung soll genau eine Zeile sein.
 $AufgabeName     = "UpdateManager-SilentMode"
@@ -3326,16 +3347,25 @@ try {
     if ($SilentMode) {
         $Global:Config = Get-UpdateConfig
 
-        # Lock-File: verhindert doppelte Silent-Mode-Laeufe (z.B. durch Daily + AtLogOn Trigger)
+        # Lock mit PID statt Dateialter: Ein Lock, dessen Prozess noch lebt,
+        # blockiert; ein verwaistes Lock (Absturz, taskkill /F) wird geraeumt
+        # und der Lauf startet. Alter als Kriterium war die Falle: Ein Lauf,
+        # der laenger als 15 min braucht (gemessen: 4:28 min normal, mit
+        # grossem Paket mehr), sah fuer den naechsten Trigger "frisch" aus.
         $lockFile = Join-Path $env:TEMP "UpdateManager-SilentMode.lock"
         if (Test-Path $lockFile) {
-            $lockAge = (Get-Date) - (Get-Item $lockFile).LastWriteTime
-            if ($lockAge.TotalMinutes -lt 15) {
-                Write-Log "Silent Mode laeuft bereits (Lock: $([math]::Round($lockAge.TotalMinutes, 1)) min alt)" "WARNING"
-                exit 0
+            $lockInhalt = Get-Content $lockFile -Raw -ErrorAction SilentlyContinue
+            $lockPid = $null
+            if ($lockInhalt -match '^PID=(\d+)') { $lockPid = [int]$Matches[1] }
+            if ($lockPid -and (Get-Process -Id $lockPid -ErrorAction SilentlyContinue)) {
+                Write-Log "Silent Mode laeuft bereits (PID $lockPid, Lock: $lockFile)" "WARNING"
+                Write-Log "Diese Runde tut nichts: bereits laufende Runde nicht doppelt starten." "INFO"
+                exit 3
             }
+            Write-Log "Verwaistes Lock ohne lebenden Prozess (PID: $lockPid) wird geräumt." "WARNING"
+            Remove-Item $lockFile -Force -ErrorAction SilentlyContinue
         }
-        New-Item -Path $lockFile -ItemType File -Force | Out-Null
+        Set-Content -Path $lockFile -Value "PID=$PID; gestartet=$(Get-Date -Format o)" -Encoding UTF8
 
         try {
             # Internet-Retry: nach dem Hochfahren ist Netzwerk evtl. noch nicht bereit
@@ -3350,7 +3380,8 @@ try {
             }
             if (-not $internetOk) {
                 Write-Log $T['no_internet'] "ERROR"
-                exit 0
+                Write-Log "Abbruch ohne Netz: nichts aktualisiert, Lock bleibt nicht zurueck." "ERROR"
+                exit 4
             }
             Write-Log $T['internet_ok'] "SUCCESS"
             Invoke-SilentUpdate
