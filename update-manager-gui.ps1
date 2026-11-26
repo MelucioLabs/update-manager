@@ -524,7 +524,9 @@ $xamlText = @'
         <StackPanel>
           <TextBlock Style="{StaticResource Symbol}" Text="&#xE81C;"/>
           <TextBlock Text="__T_verlauf__" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource Schrift}"/>
-          <TextBlock Text="__T_dieser_sitzung__" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
+          <!-- Tafel 584: one card, so the tile says the WHOLE range and not
+               only this session. -->
+          <TextBlock Text="__T_verlauf_zeitraum__" FontSize="12" Foreground="{StaticResource SchriftLei}"/>
         </StackPanel>
       </Button>
       <Button x:Name="KachelProtokolle" Grid.Column="3" Style="{StaticResource Kachel}"
@@ -621,11 +623,12 @@ $xamlText = @'
     </StackPanel>
     </StackPanel>
 
-    <!-- EINE Ansicht fuer Verlauf plus Protokoll (Chip 49, David,
-         25.11.2026): die Verlaufs-Kachel und der Verlaufsknopf hier doppeln
-         sich, der Umschalter ist weg. Details starten geschlossen (Hausregel:
-         Aufklappbares ist zu); das Feld oben traegt den Verlauf dieser
-         Sitzung, darunter das Protokoll mit seinen Filtern. -->
+    <!-- EINE Karte Verlauf (Chip 49, David, 25.11.2026; Tafel 584): die
+         Verlaufs-Kachel und der Verlaufsknopf hier doppeln sich, der
+         Umschalter ist weg. Aufklappbares startet zu. Ein Feld, keine zwei
+         Loecher mehr: das Sieben-Tage-Protokoll ist die Grundlage, der
+         Verlauf dieser Sitzung liegt ganz oben als Abschnitt "Diese
+         Sitzung" im selben Feld, darunter folgen die Tage. -->
     <StackPanel x:Name="PanelDetails" Grid.Row="2" Visibility="Collapsed">
       <WrapPanel Orientation="Horizontal" Margin="0,0,0,8">
         <Button x:Name="BtnFilterAlles" Style="{StaticResource KnopfLeise}" Margin="0,0,8,0" Visibility="Collapsed">
@@ -641,27 +644,14 @@ $xamlText = @'
           </StackPanel>
         </Button>
       </WrapPanel>
-      <TextBlock Margin="2,0,0,4" FontSize="12" Foreground="{StaticResource SchriftLei}">
-        <Run Text="__T_verlauf__"/><Run Text=" (__T_dieser_sitzung__)"/>
-      </TextBlock>
+      <!-- Eine Karte (Tafel 584, David): Hoehe grob beider frueherer Felder
+           zusammen; der ScrollViewer der Details-Ansicht faengt alles auf. -->
       <Border x:Name="PanelVerlauf" Background="{StaticResource Tief}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
-              CornerRadius="12" Padding="4" Height="180">
-        <ScrollViewer x:Name="ScrollProtokoll" VerticalScrollBarVisibility="Auto">
-          <TextBox x:Name="TxtProtokoll" Background="Transparent" Foreground="__PROTOKOLL__"
-                   BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12"
-                   IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" Padding="12,8"
-                   Text="__T_protokoll_bereit__"/>
-        </ScrollViewer>
-      </Border>
-      <TextBlock Margin="2,12,0,4" FontSize="12" Foreground="{StaticResource SchriftLei}">
-        <Run Text="__T_protokoll__"/><Run Text=" (__T_protokoll_zeitraum__)"/>
-      </TextBlock>
-      <Border x:Name="PanelProtokoll" Background="{StaticResource Tief}" BorderBrush="{StaticResource Rand}" BorderThickness="1"
-              CornerRadius="12" Padding="4" Height="336">
+              CornerRadius="12" Padding="4" Height="532">
         <RichTextBox x:Name="RtfProtokoll" Background="Transparent" Foreground="__PROTOKOLL__"
                      BorderThickness="0" IsReadOnly="True" FontFamily="Segoe UI" FontSize="13"
                      VerticalScrollBarVisibility="Auto" Padding="8,4"
-                     AutomationProperties.Name="__T_protokoll__"/>
+                     AutomationProperties.Name="__T_verlauf__"/>
       </Border>
     </StackPanel>
 
@@ -838,14 +828,14 @@ if (Test-Path -LiteralPath $iconDatei) {
 
 $E = @{}
 foreach ($name in @('TxtHardware','TxtLetzterLauf','LinkMelucio','ChkWinget','ChkChoco','ChkWindows','ChkStore','ChkTreiber',
-                    'TxtProtokoll','ScrollProtokoll','LiveRahmen','TxtLive','Fortschritt','TxtStatus','TxtZeit','BtnZeit','TxtAufgabe',
+                    'LiveRahmen','TxtLive','Fortschritt','TxtStatus','TxtZeit','BtnZeit','TxtAufgabe',
                     'BtnProtokoll','BtnSchliessen','BtnPruefen','BtnStart',
                     'ZeileNeueFassung','TxtNeueFassung','LinkNeueFassung','TxtLinkSeite','LinkUpdateSeite',
                     'BtnNeueFassung','BtnFassungSpaeter',
                     'PanelEinstellungen','KarteErgebnis','StreifenErgebnis','TxtZahl','TxtErgebnis','TxtErgebnisZeit','PanelDetails',
                     'TxtIconErgebnis','KachelEinstellungen','KachelVerlauf','KachelProtokolle','TxtBtnFilterFehler',
                     'BtnFilterAlles','BtnFilterFehler',
-                    'PanelVerlauf', 'PanelProtokoll', 'RtfProtokoll',
+                    'PanelVerlauf', 'RtfProtokoll',
                     'ChkSelbstPruefen', 'BtnSpracheDe', 'BtnSpracheEn', 'TxtSelbstUpdate', 'TxtBtnStart')) {
     $E[$name] = $fenster.FindName($name)
     if ($null -eq $E[$name]) { throw "Element fehlt im XAML: $name" }
@@ -862,6 +852,13 @@ $E.ChkStore.IsChecked = $GuiKonfig.Quellen['microsoftStore']
 $E.ChkTreiber.IsChecked = $GuiKonfig.Quellen['treiber']
 $E.ChkSelbstPruefen.IsChecked = $GuiKonfig.Pruefung
 
+# Verlauf dieser Sitzung (Tafel 584): die Zeilen sammeln sich hier; die
+# zusammengelegte Karte zeigt sie als obersten Abschnitt "Diese Sitzung".
+$script:SitzVerlauf = New-Object System.Collections.Generic.List[string]
+# Erster Baustein der Tagesliste in der Karte; neue Sitzungszeilen wandern
+# davor, die Tage bleiben darunter.
+$script:SitzTrenner = $null
+
 # ============================================================================
 #  Hilfsmittel
 # ============================================================================
@@ -876,8 +873,16 @@ function Schreibe {
         $sicherVar = Get-Variable -Name SicherZahl -Scope Script -ErrorAction SilentlyContinue
         if ($sicherVar) { $sicherVar.Value += 1 }
     }
-    $E.TxtProtokoll.AppendText("`r`n$Zeile")
-    $E.ScrollProtokoll.ScrollToEnd()
+    # Eine Karte (Tafel 584): Zeile zuerst in die Liste, dann — wenn die Karte
+    # offen ist — sofort als Absatz in den obersten Abschnitt, vor der
+    # Tagesliste. Das Feld scrollt nicht hinterher: das Live-Fenster zeigt den
+    # Lauf ohnehin, und die Tage unten bleiben ruhig stehen.
+    $script:SitzVerlauf.Add($Zeile)
+    if ($AnsichtGeladen -and (Details-Offen) -and $null -ne $script:SitzTrenner) {
+        $E.RtfProtokoll.Document.Blocks.InsertBefore($script:SitzTrenner, (Neue-SitzZeile $Zeile))
+    } elseif ($AnsichtGeladen -and (Details-Offen)) {
+        $E.RtfProtokoll.Document.Blocks.Add((Neue-SitzZeile $Zeile))
+    }
     # Live-Fenster: nur die letzten LIVE_ZEILEN, leere Zeilen zaehlen nicht.
     if ($Zeile.Trim()) {
         $Live.Add($Zeile)
@@ -1510,11 +1515,13 @@ $script:FilterFehler = $false
 function Details-Offen { return ($E.PanelDetails.Visibility -eq 'Visible') }
 
 function Zeige-Details {
-    # EINE Ansicht (Chip 49, David, 25.11.2026): der alte Modus-Umschalter
-    # (verlauf gegen protokoll) ist weg, beide Felder zeigen zusammen. Die
-    # Filter der Protokoll-Ansicht gehoeren zum unteren Feld und sind mit
-    # der Ansicht da. Frisch gelesen wird das Protokoll jedes Mal beim
-    # Oeffnen, damit die Ansicht nicht auf altem Stand steht.
+    # EINE Karte (Chip 49; ein Feld statt zweier, Tafel 584, David,
+    # 25.11.2026): der alte Modus-Umschalter (verlauf gegen protokoll) ist
+    # weg, die Karte zeigt den Verlauf dieser Sitzung oben und das
+    # Sieben-Tage-Protokoll darunter in einem Feld. Die Filter der
+    # Protokoll-Ansicht gehoeren zur Karte und sind mit der Ansicht da. Frisch
+    # gelesen wird das Protokoll jedes Mal beim Oeffnen, damit die Ansicht
+    # nicht auf altem Stand steht.
     param([bool]$Ja)
     $E.PanelDetails.Visibility = if ($Ja) { 'Visible' } else { 'Collapsed' }
     $filterSicht = if ($Ja -and $AnsichtGeladen) { 'Visible' } else { 'Collapsed' }
@@ -1621,6 +1628,20 @@ function Markiere-Knopf {
     }
 }
 
+function Neue-SitzZeile {
+    # One line of this session as a paragraph, same size as the day entries.
+    param([string]$Zeile)
+    $p = New-Object System.Windows.Documents.Paragraph
+    $p.Margin = New-Object System.Windows.Thickness(0, 1, 0, 1)
+    $p.Padding = New-Object System.Windows.Thickness(4, 1, 4, 1)
+    $r = New-Object System.Windows.Documents.Run($Zeile)
+    $r.FontFamily = New-Object System.Windows.Media.FontFamily('Cascadia Mono, Consolas')
+    $r.FontSize = 12
+    $r.Foreground = $fenster.FindResource('Schrift')
+    [void]$p.Inlines.Add($r)
+    return $p
+}
+
 function Zeige-ProtokollAnsicht {
     if (-not $AnsichtGeladen -or -not (Test-Path $LogPfad)) {
         $E.TxtStatus.Text = $T['kein_protokoll']
@@ -1645,6 +1666,26 @@ function Zeige-ProtokollAnsicht {
         $fehlerFlaeche = New-Object System.Windows.Media.SolidColorBrush(
             [System.Windows.Media.Color]::FromArgb(0x22, ($fenster.FindResource('Schlecht')).Color.R,
                 ($fenster.FindResource('Schlecht')).Color.G, ($fenster.FindResource('Schlecht')).Color.B))
+        # "Diese Sitzung" ganz oben (Tafel 584): derselbe Kopfstil wie bei den
+        # Tagen, aber der Abschnitt ist eher da als die Tage und hat KEIN
+        # eigenes Feld mehr. Danach die Tage; der erste Tageskopf wird gemerkt,
+        # damit neue Sitzungszeilen beim Lauf zuverlaessig davor landen.
+        $script:SitzTrenner = $null
+        $sitzKopf = New-Object System.Windows.Documents.Paragraph
+        $sitzKopf.Margin = New-Object System.Windows.Thickness(0, 0, 0, 4)
+        $sitzKopf.BorderBrush = $lei
+        $sitzKopf.BorderThickness = New-Object System.Windows.Thickness(0, 0, 0, 1)
+        $sitzWort = New-Object System.Windows.Documents.Run($T['sitz_kopf'].ToUpperInvariant())
+        $sitzWort.FontSize = 12; $sitzWort.FontWeight = 'SemiBold'; $sitzWort.Foreground = $lei
+        [void]$sitzKopf.Inlines.Add($sitzWort); [void]$doc.Blocks.Add($sitzKopf)
+        if (@($script:SitzVerlauf).Count -eq 0) {
+            $p = New-Object System.Windows.Documents.Paragraph
+            $p.Margin = New-Object System.Windows.Thickness(0, 1, 0, 1)
+            $r = New-Object System.Windows.Documents.Run($T['protokoll_bereit'])
+            $r.Foreground = $lei; [void]$p.Inlines.Add($r); [void]$doc.Blocks.Add($p)
+        } else {
+            foreach ($s in @($script:SitzVerlauf)) { [void]$doc.Blocks.Add((Neue-SitzZeile $s)) }
+        }
         if (@($tage).Count -eq 0) {
             $p = New-Object System.Windows.Documents.Paragraph
             $r = New-Object System.Windows.Documents.Run($(if ($script:FilterFehler) { $T['keine_fehler_protokoll'] } else { $T['protokoll_leer'] }))
@@ -1658,6 +1699,8 @@ function Zeige-ProtokollAnsicht {
             $r = New-Object System.Windows.Documents.Run((Get-TagesKopf $tag.Datum -SprachTabelle $T -Sprache $Sprache).ToUpper())
             $r.FontSize = 12; $r.FontWeight = 'SemiBold'; $r.Foreground = $lei
             [void]$kopf.Inlines.Add($r); [void]$doc.Blocks.Add($kopf)
+            # Erster Tageskopf = Grenze des Sitzungs-Abschnitts (Tafel 584).
+            if ($null -eq $script:SitzTrenner) { $script:SitzTrenner = $kopf }
             foreach ($ein in $tag.Eintraege) {
                 $p = New-Object System.Windows.Documents.Paragraph
                 $p.Margin = New-Object System.Windows.Thickness(0, 1, 0, 1)
@@ -2001,7 +2044,7 @@ if ($NurPruefen) {
     Write-Host "Erscheinung: $Erscheinung -> $(if ($AppsHell) { 'hell' } else { 'dunkel' })"
     Write-Host "Kern: $Kern"
     Write-Host "Sprache: $Sprache"
-    Write-Host ("Knopf: {0} | Bereit: {1}" -f $E.TxtBtnStart.Text, $E.TxtProtokoll.Text)
+    Write-Host ("Knopf: {0} | Verlauf-Karte da: {1}" -f $E.TxtBtnStart.Text, ($null -ne $E.RtfProtokoll))
     exit 0
 }
 

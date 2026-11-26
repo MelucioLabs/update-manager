@@ -667,22 +667,39 @@ if (Test-Path $Gui) {
     }
 }
 
-# ── 5e. Eine Ansicht fuer Verlauf plus Protokoll; Kacheln als Beschriftung ──
+# ── 5e. Eine Verlauf-Karte: Sitzung oben, Tage darunter ─────────────────────
 # Chip 49 (David, 25.11.2026): die Verlaufs-Kachel und der Verlaufsknopf der
 # Details-Ansicht doppeln sich; "8 Laeufe" hing als Statistik an der
 # Protokoll-Kachel; "5 von 5" belegte den Platz der Einstellungen-Kachel.
+# Tafel 584 (David): aus den beiden Feldern "Verlauf (dieser Sitzung)" und
+# "Protokoll (Sieben Tage)" wurde EINE Karte; der Sitzungs-Abschnitt liegt im
+# selben Feld, er hat kein Loch mehr.
 if (Test-Path $Gui) {
     $guiText5e = Get-Content $Gui -Raw
 
-    # Der gedoppelte Verlaufsknopf ist weg, VORLAGE und Felder zeigen
-    # zusammen als eine Ansicht (beide Behaelter bleiben, kein Umschalter).
-    $doppel5e = @('BtnAnsichtVerlauf', 'BtnAnsichtProtokoll') | Where-Object { $guiText5e -match [regex]::Escape($_) }
-    $zusammen5e = ($guiText5e -match 'x:Name="PanelVerlauf"') -and ($guiText5e -match 'x:Name="PanelProtokoll"')
+    # Der gedoppelte Verlaufsknopf ist weg und EINE Karte traegt beides; die
+    # alten Felder (eigene TextBox der Sitzung, eigener Protokoll-Container)
+    # duerfen keine Ueberbleibsel hinterlassen.
+    $doppel5e = @('BtnAnsichtVerlauf', 'BtnAnsichtProtokoll', 'x:Name="PanelProtokoll"',
+                  'x:Name="TxtProtokoll"', 'x:Name="ScrollProtokoll"') |
+        Where-Object { $guiText5e -match [regex]::Escape($_) }
+    $zusammen5e = ($guiText5e -match 'x:Name="PanelVerlauf"') -and ($guiText5e -match 'x:Name="RtfProtokoll"')
     if (-not $doppel5e -and $zusammen5e) {
-        Melde 'ok' 'eine Ansicht fuer Verlauf plus Protokoll (gedoppelter Verlaufsknopf weg)'
+        Melde 'ok' 'eine Verlauf-Karte statt zweier Felder (Sitzung und Tage im selben Feld)'
     } else {
-        if ($doppel5e) { Schlecht "gedoppelter Verlaufsknopf steht noch da: $($doppel5e -join ', ')" }
-        if (-not $zusammen5e) { Schlecht 'Felder Verlauf und Protokoll ohne gemeinsame Ansicht' }
+        if ($doppel5e) { Schlecht "Alte Felder oder gedoppelter Verlaufsknopf stehen noch da: $($doppel5e -join ', ')" }
+        if (-not $zusammen5e) { Schlecht 'Verlauf-Karte unvollstaendig (PanelVerlauf/RtfProtokoll fehlt)' }
+    }
+
+    # Der Sitzungs-Abschnitt liegt GANZ OBEN in derselben Karte: der Aufbau
+    # merkt sich den ersten Tageskopf, neue Zeilen laufen vor ihm ein.
+    $abschnitt5e = $guiText5e -match 'sitz_kopf' -and
+        $guiText5e -match [regex]::Escape('InsertBefore($script:SitzTrenner') -and
+        $guiText5e -match [regex]::Escape('$script:SitzTrenner = $kopf')
+    if ($abschnitt5e) {
+        Melde 'ok' 'Sitzungs-Abschnitt oben in derselben Karte, neue Zeilen vor dem ersten Tageskopf'
+    } else {
+        Schlecht 'Sitzungs-Abschnitt fehlt oder ist fest vermauert (kein Tageskopf-Trenner)'
     }
 
     # Verlauf- und Protokoll-Kachel oeffnen dieselbe_ansicht (einmal zu sein):
