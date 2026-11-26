@@ -308,7 +308,7 @@ update-manager/
 
 ## Changelog
 
-### Unreleased (preparing v3.3.5)
+### v3.3.5 (unreleased, goes out with the release run)
 - **Window start without any console flash:** the starter `update-manager-gui.vbs` (wscript) builds the window directly.
 - **One history card:** the running session's history and the seven-day log share one field — the session on top under "This session", the days below.
 

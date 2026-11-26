@@ -370,7 +370,7 @@ update-manager/
 
 ## Changelog
 
-### Unveröffentlicht (Vorbereitung auf v3.3.5)
+### v3.3.5 (unveröffentlicht, kommt mit dem Release-Lauf)
 - **Fensterstart ganz ohne Konsole:** der Starter `update-manager-gui.vbs` (wscript) baut das Fenster direkt.
 - **Eine Karte Verlauf:** der Verlauf der laufenden Sitzung und das Sieben-Tage-Protokoll liegen in einem Feld: die Sitzung oben als Abschnitt „Diese Sitzung", darunter die Tage.
 
