@@ -19,25 +19,25 @@ Ein umfassender Windows-Update-Manager, der Updates aus mehreren Quellen in eine
 
 ## Features
 
-### Multi-Quellen Update-Verwaltung:
+### Update-Verwaltung aus mehreren Quellen:
 - **Windows Update** - Offizielle Microsoft-Updates (inkl. optionale Treiber-Updates)
 - **Winget** - Microsoft Paketmanager
 - **Chocolatey** - Community-Paketmanager
 - **Microsoft Store** - UWP-App Updates (öffnet den Store zur manuellen Bestätigung)
 
-### Hardware-Auto-Erkennung:
+### Automatische Hardware-Erkennung:
 - **CPU-Hersteller** - Intel, AMD
-- **GPU-Hersteller** - NVIDIA (App + GeForce Experience Fallback), AMD, Intel
+- **GPU-Hersteller** - NVIDIA (App, sonst GeForce Experience), AMD, Intel
 - **Mainboard** - MSI Center Unterstützung
 - **Automatische Treiber-Auswahl** - Aktualisiert nur relevante Hardware-Hersteller
 
 ### Silent Mode (Hintergrund-Modus):
 - Führt Winget + Chocolatey vollständig im Hintergrund aus (keine interaktiven Abfragen)
 - **Angeheftete Pakete** (von Winget als "explizite Zielgruppenadressierung" markiert) werden automatisch einzeln per `--id` aktualisiert
-- **Internet-Retry:** Wartet bis zu 2,5 Minuten auf eine Internetverbindung nach dem Hochfahren (5 Versuche à 30s)
-- **Lock-File-Schutz:** Verhindert parallele Silent-Mode-Läufe bei mehreren Task-Triggern
+- **Internetprüfung mit Wiederholung:** Wartet bis zu 2,5 Minuten auf eine Internetverbindung nach dem Hochfahren (5 Versuche à 30s)
+- **Sperrdatei-Schutz (Lock-File):** Verhindert parallele Silent-Mode-Läufe bei mehreren Auslösungspunkten
 - Überspringt bei bereits erfolgtem Update am gleichen Tag (Doppellauf-Schutz)
-- Detailliertes Logging: Zeigt welche Pakete tatsächlich aktualisiert wurden (Name + Anzahl)
+- Ausführliches Protokoll: Zeigt, welche Pakete tatsächlich aktualisiert wurden (Name + Anzahl)
 - Kann direkt über den Parameter `-SilentMode` aufgerufen werden
 
 ### Automatische Planung (Aufgabenplanung):
@@ -73,8 +73,9 @@ Spiegel dieses Ordners, die Hauptquelle bleibt das MelucioLabs-Monorepo.
    Desktop und die nächtliche Prüfung im Hintergrund (Aufgabenplanung).
 3. Danach aktualisiert sich der Manager selbst über die GitHub-Releases.
 
-**Stand:** Das Installer-Skript (`installer/update-manager.iss`) und der
-Release-Workflow sind vorbereitet. **Signierte Setups gibt es noch nicht**;
+**Stand:** Das Setup (Installer-Skript `installer/update-manager.iss`) und der
+Release-Workflow laufen seit dem 28.09.2026; auf `meluciolabs.de/update` liegt
+die Anleitung. **Signierte Setups gibt es noch nicht**;
 die Code-Signatur über die SignPath Foundation ist geplant. Bis dahin warnt
 Windows SmartScreen vor einem unbekannten Herausgeber. Das Fenster fragt höchstens
 einmal am Tag bei GitHub nach einer neuen Fassung; der Knopf „Neue Version
@@ -118,7 +119,7 @@ ab dem ersten signierten Release gilt, stehen in
 # Als Administrator ausführen
 .\universal-update-manager.ps1
 
-# Direkt im Silent Mode starten (z. B. via Aufgabenplanung)
+# Direkt im Silent Mode starten (z. B. über die Aufgabenplanung)
 .\universal-update-manager.ps1 -SilentMode
 ```
 
@@ -137,7 +138,7 @@ ab dem ersten signierten Release gilt, stehen in
 | 7 | Silent Mode | Hintergrund-Update (Winget + Choco) |
 | 8 | Auto-Update Setup | Aufgabenplanung erstellen/bearbeiten/löschen |
 | 9 | System-Info | Hardware & installierte Tools Übersicht |
-| L | Log anzeigen | Letzte 50 Zeilen der Log-Datei |
+| L | Log-Datei öffnen | Protokoll-Ansicht im Editor, neueste Läufe oben |
 
 > Die meisten Eingaben erfolgen per Einzeltastendruck (kein Enter nötig). Nur die Uhrzeiteingabe bei der Aufgabenplanung benötigt Enter.
 
@@ -150,8 +151,8 @@ ab dem ersten signierten Release gilt, stehen in
 ```json
 {
   "updateSources": {
-    "winget": { "enabled": true, "autoAccept": false, "timeoutSeconds": 300 },
-    "chocolatey": { "enabled": true, "autoAccept": false, "timeoutSeconds": 90 },
+    "winget": { "enabled": true, "autoAccept": false, "timeoutSeconds": 1800, "includeUnknown": true },
+    "chocolatey": { "enabled": true, "autoAccept": false, "timeoutSeconds": 1800 },
     "windowsUpdate": { "enabled": true, "includeDrivers": true, "includeOptional": false },
     "microsoftStore": { "enabled": true }
   },
@@ -269,9 +270,9 @@ und Ränder.
 
 ---
 
-## Log-Dateien
+## Protokolldatei
 
-Logs werden gespeichert in:
+Die Protokolldatei wird gespeichert in:
 ```
 C:\ProgramData\UpdateManager\universal-update-manager.log
 ```
@@ -369,6 +370,34 @@ update-manager/
 
 ## Changelog
 
+### Unveröffentlicht (Vorbereitung auf v3.3.5)
+- **Fensterstart ganz ohne Konsole:** der Starter `update-manager-gui.vbs` (wscript) baut das Fenster direkt.
+- **Eine Karte Verlauf:** der Verlauf der laufenden Sitzung und das Sieben-Tage-Protokoll liegen in einem Feld: die Sitzung oben als Abschnitt „Diese Sitzung", darunter die Tage.
+
+### v3.3.4 (25.11.2026)
+- **GUI-Starter:** die Administratorerhöhung läuft über `-Command` mit `&` statt `-File`.
+
+### v3.3.3 (25.11.2026)
+- **Klicksperre:** während eines Laufs sind alle Steuerelemente gesperrt, nicht nur die Laufknöpfe.
+- **Zusammengelegte Verlaufs-Protokoll-Ansicht** statt eines Umschalters zwischen Verlauf und Protokoll.
+- **Fehlerpflege:** der Takt-Ausnahmefall räumt auf, die Freigabe der Klicksperre kommt zuerst und die Warteschlange wird restlos geleert; eine verweigerte Administratorerhöhung wird sichtbar gemeldet.
+
+### v3.3.2 (25.11.2026)
+- **Setup:** Ausgabename ohne doppelte Endung; `gui-sprache.ps1` liegt im Paket bei; doppelte Direktive im Installer aufgelöst.
+
+### v3.3.1 (25.11.2026)
+- **Kurzprotokoll mit Übersicht** am Ende jedes Laufs und **BIOS-Stand nur lesend** samt Microcode- und BIOS-Alter-Warnung (29.10.2026).
+- **Sicherheitsrelevante Kennzeichnung** der Windows-Updates beim Nachsehen.
+- **Tastaturkürzel** Strg+S/N/P/F/Q auf bestehende Knöpfe; Knöpfe mit Rand, Fokus und Berührungszustand.
+- **Einstellungs-Punkt Selbst-Update** mit Statuszeile; das Fenster ist zweisprachig.
+- Schlichter Setup-Name mit eigenem Symbol und Fassung nach Setup-Name.
+
+### v3.2.0 (09.10.2026)
+- **Protokoll hält sieben Tage**; alte Rotationen nach Größe ersetzt, Ansicht neueste Läufe oben.
+- **Live-Fenster** mit den letzten zehn Zeilen während des Laufs; **Ergebniskarte** sagt das Ergebnis in einem Satz.
+- **Selbst-Update vorbereitet:** Tagesabfrage bei GitHub, Hinweis im Fenster, Installieren mit Prüfsumme (Schalter bleibt AUS bis zur Signatur).
+- **Seite `/update`** zum Herunterladen, Datenschutzhinweis im Setup, Lizenzangabe.
+
 ### v3.1 (26.02.2026)
 - **Silent Mode Fix:** Winget-Updates werden jetzt zuverlässig installiert (auch über Aufgabenplanung)
 - **Angeheftete Pakete:** Werden automatisch einzeln per `winget upgrade --id` aktualisiert
@@ -437,4 +466,4 @@ Marke in einer Weise, die den Eindruck erweckt, sie stammten von MelucioLabs.
 ---
 
 **Status:** Produktionsreif
-**Letzte Aktualisierung:** Februar 2026
+**Letzte Aktualisierung:** November 2026

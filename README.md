@@ -73,8 +73,9 @@ of this folder, the source of truth stays in the MelucioLabs monorepo.
    the nightly background check (Task Scheduler).
 3. From then on the manager updates itself from the GitHub releases.
 
-**Status:** The installer script (`installer/update-manager.iss`) and the
-release workflow are prepared. **Signed setups are not available yet**; code
+**Status:** The setup (installer script `installer/update-manager.iss`) and the
+release workflow are live since 2026-09-28; the guide sits at
+`meluciolabs.de/update`. **Signed setups are not available yet**; code
 signing through the SignPath Foundation is planned. Until then Windows
 SmartScreen will warn about an unknown publisher. The window checks GitHub at most once a day and shows a notice; the
 "install new version" button is built but OFF by default until the setup is
@@ -135,7 +136,7 @@ that applies from the first signed release are in
 | 7 | Silent Mode | Background update (Winget + Choco) |
 | 8 | Auto-Update Setup | Create/edit/delete Task Scheduler entry |
 | 9 | System Info | Hardware & installed tool overview |
-| L | View Log | Last 50 lines of the log file |
+| L | Open log file | Protocol view in the editor, newest runs on top |
 
 > Most inputs use single-key press (no Enter required). Only the time input for Task Scheduler needs Enter.
 
@@ -148,8 +149,8 @@ that applies from the first signed release are in
 ```json
 {
   "updateSources": {
-    "winget": { "enabled": true, "autoAccept": false, "timeoutSeconds": 300 },
-    "chocolatey": { "enabled": true, "autoAccept": false, "timeoutSeconds": 90 },
+    "winget": { "enabled": true, "autoAccept": false, "timeoutSeconds": 1800, "includeUnknown": true },
+    "chocolatey": { "enabled": true, "autoAccept": false, "timeoutSeconds": 1800 },
     "windowsUpdate": { "enabled": true, "includeDrivers": true, "includeOptional": false },
     "microsoftStore": { "enabled": true }
   },
@@ -307,6 +308,34 @@ update-manager/
 
 ## Changelog
 
+### Unreleased (preparing v3.3.5)
+- **Window start without any console flash:** the starter `update-manager-gui.vbs` (wscript) builds the window directly.
+- **One history card:** the running session's history and the seven-day log share one field — the session on top under "This session", the days below.
+
+### v3.3.4 (2026-11-25)
+- **GUI starter:** admin elevation via `-Command` with `&` instead of `-File`.
+
+### v3.3.3 (2026-11-25)
+- **Click lock:** during a run every control is locked, not only the run buttons.
+- **Combined history/log view** instead of a switch between history and log.
+- **Error paths:** the tick exception cleans up, unlocking the click lock comes first, the queue is drained completely; a denied admin elevation is reported visibly.
+
+### v3.3.2 (2026-11-25)
+- **Setup:** output name without a doubled extension; `gui-sprache.ps1` ships in the package; duplicate directive in the installer resolved.
+
+### v3.3.1 (2026-11-25)
+- **Short log with an end-of-run summary** and **read-only BIOS report** including microcode and BIOS-age warnings (2026-10-29).
+- **Security-relevant marking** of Windows updates when just looking them up.
+- **Keyboard shortcuts** Ctrl+S/N/P/F/Q on existing buttons; readable buttons (border, focus, touch).
+- **Settings entry for self-update** with a status line; the window is bilingual.
+- Plain setup name with its own icon, version taken from the setup name.
+
+### v3.2.0 (2026-10-09)
+- **The log keeps seven days**; old size-based rotations replaced, the view shows newest runs on top.
+- **Live window** with the last ten lines during a run; **result card** states the outcome in one sentence.
+- **Self-update prepared:** daily GitHub check, notice in the window, install with checksum (switch stays OFF until signing).
+- **Download page `/update`**, privacy notice in the setup, license statement.
+
 ### v3.1 (2026-02-26)
 - **Silent Mode fix:** Winget updates now install reliably (including via Task Scheduler)
 - **Pinned packages:** Automatically updated individually via `winget upgrade --id`
@@ -374,4 +403,4 @@ that suggests they come from MelucioLabs.
 ---
 
 **Status:** Production-Ready
-**Last Updated:** February 2026
+**Last Updated:** November 2026
