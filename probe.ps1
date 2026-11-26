@@ -859,8 +859,42 @@ if (Test-Path $Setup) {
         if ($aufBat5h) { Schlecht 'Installer-Verknuepfung zeigt noch direkt auf update-manager-gui.bat - das Konsolenfenster blitzt weiter' }
         if (-not $aufStarter5h) { Schlecht 'Installer kennt den Starter nicht (wscript.exe mit update-manager-gui.vbs fehlt)' }
     }
-}
 
+}
+# ── 5i. Release-Lauf: die pwsh-Blocks der release.yml lassen sich parsen ──
+# Der Spiegel-Release startet seit dem 26.11.2026 bei jedem Sync. Sein
+# PowerShell-Code lebt in den run-Blocks dieser Datei — ein Parserfehler
+# ("$f: ..." liest pwsh als Variablenbereich) bricht dort erst auf dem
+# Runner auf. Diese Probe liest die pwsh-Blocks und parst sie im Vorbeigehen;
+# GitHub-Ausdruecke {{ }} ersetzt der Runner vorher: hier steht eine Attrappe.
+$ReleaseYml = Join-Path $Ordner '.github\workflows\release.yml'
+if (Test-Path $ReleaseYml) {
+    $releaseText5i = [IO.File]::ReadAllText($ReleaseYml)
+    # GitHub-Ausdruecke {{ }} ersetzt der Runner vorher: Attrappe einsetzen.
+    $releaseText5i = [regex]::Replace($releaseText5i, '\{\{[^}]*\}\}', 'ATTRAPPE')
+    $pwshBlocks5i = [regex]::Matches($releaseText5i, '(?ms)^        run: \|\r?\n(.*?)(?=^      - name:|^      - uses:|^      # )')
+    if ($pwshBlocks5i.Count -eq 0) {
+        Schlecht 'release.yml ohne run-Blocks - Schrittstruktur geaendert?'
+    } else {
+        $parsefehler5i = @()
+        foreach ($b in $pwshBlocks5i) {
+            $text5i = ($b.Groups[1].Value -replace '(?m)^          ', '')
+            $fehler5i = $null
+            [void][System.Management.Automation.Language.Parser]::ParseInput($text5i, [ref]$null, [ref]$fehler5i)
+            if ($fehler5i) {
+                $zeilen5i = ($text5i -split '\\r?\n')
+                $parsefehler5i += @($fehler5i | ForEach-Object {
+                    ($zeilen5i[$_.Extent.StartLineNumber - 1].Trim()) + ' -> ' + $_.Message
+                })
+            }
+        }
+        if ($parsefehler5i.Count -eq 0) {
+            Melde 'ok' "alle $($pwshBlocks5i.Count) pwsh-Blocks der release.yml lassen sich parsen"
+        } else {
+            Schlecht "release.yml: pwsh-Block unlesbar, der Release-Lauf faellt an: $($parsefehler5i -join ' | ')"
+        }
+    }
+}
 
 # ── 6. Verhalten: die drei Ausgaenge eines Jobs ─────────────────────────────
 #

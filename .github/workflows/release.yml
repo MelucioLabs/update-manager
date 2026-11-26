@@ -123,7 +123,7 @@ jobs:
                       $hatBom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
                       $text = [Text.UTF8Encoding]::new($hatBom).GetString($bytes)
                       $neu = [regex]::Replace($text, "(?m)^(\`$UpdaterVersion\s*=\s*')[^']+(')", "`${1}$version`$2")
-                      if ($neu -ceq $text) { throw "$f: `$UpdaterVersion ließ sich nicht auf $version anheben" }
+                      if ($neu -ceq $text) { throw "${f}: `$UpdaterVersion ließ sich nicht auf $version anheben" }
                       [IO.File]::WriteAllText((Resolve-Path $f), $neu, [Text.UTF8Encoding]::new($hatBom))
                   }
                   echo "::notice title=Version angehoben::Tag v$hoechste existierte schon; der Spiegel-Stand wird als v$version releast."
