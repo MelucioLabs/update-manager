@@ -101,6 +101,13 @@ Write-Host "Bausteinprobe Update-Manager" -ForegroundColor Cyan
 Write-Host "----------------------------" -ForegroundColor Cyan
 
 # ── 1. Syntax ───────────────────────────────────────────────────────────────
+# $GuiParstSauber merkt sich, ob die Oberflaeche oben durchging. Sektion 5
+# startet ihre Kindlaeufe nur, wenn sie parst: Ein solcher Lauf schreibt bei
+# einem Syntaxfehler nach STDERR, und `2>&1` unter Stop macht daraus einen
+# NativeCommandError, der die ganze Probe enthoeppt (Release-Run 45817653148,
+# 26.11.2026). Der Befund steht schon hier als ROT; die Folgepruefungen
+# fallen dann ersichtlich aus, statt mitten im Lauf zu sterben.
+$GuiParstSauber = $false
 foreach ($datei in @($Kern, $Gui, $Sprach)) {
     $name = Split-Path -Leaf $datei
     if (-not (Test-Path $datei)) { Schlecht "$name fehlt"; continue }
@@ -110,6 +117,7 @@ foreach ($datei in @($Kern, $Gui, $Sprach)) {
         Schlecht "$name hat $($fehlerliste.Count) Syntaxfehler, erster: $($fehlerliste[0].Message)"
     } else {
         Melde 'ok' "$name laesst sich parsen"
+        if ($datei -eq $Gui) { $GuiParstSauber = $true }
     }
 }
 
@@ -445,49 +453,73 @@ if ((Test-Path $Gui) -and (Test-Path $Sprach)) {
 # Der Blindtest der Oberflaeche (`-NurPruefen`) oeffnet nichts und braucht
 # seit dem 22.09.2026 keine erhoehte Sitzung mehr — vorher stand `#Requires
 # -RunAsAdministrator` in der Datei und sperrte damit auch den Test aus.
+#
+# Die Kindlaeufe hier laufen alle durch ein Netz: `2>&1` verwandelt unter
+# $ErrorActionPreference = 'Stop' die erste STDERR-Zeile des Kindes in einen
+# NativeCommandError, der die ganze Probe enthoeppt, statt als ROT zu
+# zaehlen (Run 45817653148, 26.11.2026). Rufe-Gui fängt das und liefert
+# Code und Ausgabe ordentlich zurück; die Meldung unten sagt dann, WAS
+# scheiterte, und die Probe läuft zu Ende.
+function Rufe-Gui {
+    param([string[]]$GuiArgumente)
+    try {
+        $roh = & (Get-Process -Id $PID).Path -NoProfile @GuiArgumente 2>&1
+        return @{ Code = $LASTEXITCODE; Aus = $roh }
+    } catch {
+        # NativeCommandError o. a.: der Lauf selbst traegt den Befund.
+        return @{ Code = -1; Aus = @(($_ | Out-String).Trim()) }
+    }
+}
+
 if (Test-Path $Gui) {
-    foreach ($art in @('hell', 'dunkel')) {
-        $ausgabe = & (Get-Process -Id $PID).Path -NoProfile -File $Gui -NurPruefen -Erscheinung $art 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Melde 'ok' "Fenster baut sich auf ($art): $($ausgabe | Select-Object -First 1)"
-        } else {
-            Schlecht "Fenster laesst sich nicht aufbauen ($art): $($ausgabe | Select-Object -Last 1)"
+    if (-not $GuiParstSauber) {
+        # Parse-Fehler ist schon in Schritt 1 als ROT gezaehlt; die Kindlaeufe
+        # koennen dazu nichts mehr beitragen und scheitern nur laut.
+        Schlecht 'Blindtests des Fensters fallen aus: update-manager-gui.ps1 parst nicht (Befund in Schritt 1)'
+    } else {
+        foreach ($art in @('hell', 'dunkel')) {
+            $r = Rufe-Gui -GuiArgumente @('-File', $Gui, '-NurPruefen', '-Erscheinung', $art)
+            if ($r.Code -eq 0) {
+                Melde 'ok' "Fenster baut sich auf ($art): $($r.Aus | Select-Object -First 1)"
+            } else {
+                Schlecht "Fenster laesst sich nicht aufbauen ($art): $($r.Aus | Select-Object -Last 1)"
+            }
         }
-    }
 
-    # Und einmal MIT Nachladen: Hardware und Aufgabenplanung holt das Fenster
-    # seit dem 23.09.2026 nebenher (vorher stand es dafuer 4,4 s still). Der
-    # Blindtest oben endet vor diesem Teil und waere blind fuer genau den
-    # Umbau; `-Selbsttest` dreht die Nachrichtenschleife von Hand und prueft,
-    # dass beide Zeilen wirklich ankommen.
-    $st = & (Get-Process -Id $PID).Path -NoProfile -File $Gui -Selbsttest 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Melde 'ok' "Nachladen kommt im Fenster an ($(($st | Select-Object -First 1)))"
-    } else {
-        Schlecht "Nachladen kommt nicht an: $($st -join ' / ')"
-    }
+        # Und einmal MIT Nachladen: Hardware und Aufgabenplanung holt das Fenster
+        # seit dem 23.09.2026 nebenher (vorher stand es dafuer 4,4 s still). Der
+        # Blindtest oben endet vor diesem Teil und waere blind fuer genau den
+        # Umbau; `-Selbsttest` dreht die Nachrichtenschleife von Hand und prueft,
+        # dass beide Zeilen wirklich ankommen.
+        $stR = Rufe-Gui -GuiArgumente @('-File', $Gui, '-Selbsttest')
+        if ($stR.Code -eq 0) {
+            Melde 'ok' "Nachladen kommt im Fenster an ($(($stR.Aus | Select-Object -First 1)))"
+        } else {
+            Schlecht "Nachladen kommt nicht an: $($stR.Aus -join ' / ')"
+        }
 
-    # Beide Sprachen (Davids Wunsch, 25.11.2026): Das Fenster baut sich auch
-    # auf Englisch, und die Stichprobe liest die Two-Texte am sichtbarsten
-    # Ort: der Primaer-Knopf und die Bereit-Zeile. Das linke Feld nach dem
-    # Auffangnetz steht: Ein fehlender Schluessel wuerde hier als Wortlaut
-    # "__T_...__" oder als Abbruch erscheinen.
-    $startDe = & (Get-Process -Id $PID).Path -NoProfile -File $Gui -NurPruefen -Sprache de 2>&1
-    $startEn = & (Get-Process -Id $PID).Path -NoProfile -File $Gui -NurPruefen -Sprache en 2>&1
-    $knopfDe = ($startDe | Where-Object { "$_" -like 'Knopf: *' }) -join ''
-    $knopfEn = ($startEn | Where-Object { "$_" -like 'Knopf: *' }) -join ''
-    if ($LASTEXITCODE -eq 0 -and $knopfDe -match 'Aktualisieren' -and $knopfDe -notmatch '__T_') {
-        Melde 'ok' "Fenster auf Deutsch: $knopfDe"
-    } else {
-        Schlecht "Fenster deutsch nicht sauber aufgebaut: $knopfDe"
-    }
-    if ($knopfEn -match 'Update' -and $knopfEn -notmatch 'Aktualisieren' -and $knopfEn -notmatch '__T_') {
-        Melde 'ok' "Fenster auf Englisch: $knopfEn"
-    } else {
-        Schlecht "Fenster englisch nicht sauber aufgebaut: $knopfEn"
-    }
-    if ("$knopfDe" -eq "$knopfEn") {
-        Schlecht 'Sprachumschaltung zeigt keinerlei Wirkung (beide Stichproben gleich)'
+        # Beide Sprachen (Davids Wunsch, 25.11.2026): Das Fenster baut sich auch
+        # auf Englisch, und die Stichprobe liest die Kern-Texte am sichtbarsten
+        # Ort: der Primaer-Knopf und die Bereit-Zeile. Das linke Feld nach dem
+        # Auffangnetz steht: Ein fehlender Schluessel wuerde hier als Wortlaut
+        # "__T_...__" oder als Abbruch erscheinen.
+        $deR = Rufe-Gui -GuiArgumente @('-File', $Gui, '-NurPruefen', '-Sprache', 'de')
+        $enR = Rufe-Gui -GuiArgumente @('-File', $Gui, '-NurPruefen', '-Sprache', 'en')
+        $knopfDe = ($deR.Aus | Where-Object { "$_" -like 'Knopf: *' }) -join ''
+        $knopfEn = ($enR.Aus | Where-Object { "$_" -like 'Knopf: *' }) -join ''
+        if ($deR.Code -eq 0 -and $knopfDe -match 'Aktualisieren' -and $knopfDe -notmatch '__T_') {
+            Melde 'ok' "Fenster auf Deutsch: $knopfDe"
+        } else {
+            Schlecht "Fenster deutsch nicht sauber aufgebaut: $knopfDe"
+        }
+        if ($enR.Code -eq 0 -and $knopfEn -match 'Update' -and $knopfEn -notmatch 'Aktualisieren' -and $knopfEn -notmatch '__T_') {
+            Melde 'ok' "Fenster auf Englisch: $knopfEn"
+        } else {
+            Schlecht "Fenster englisch nicht sauber aufgebaut: $knopfEn"
+        }
+        if ("$knopfDe" -eq "$knopfEn") {
+            Schlecht 'Sprachumschaltung zeigt keinerlei Wirkung (beide Stichproben gleich)'
+        }
     }
 }
 

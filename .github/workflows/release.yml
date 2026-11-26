@@ -121,7 +121,13 @@ jobs:
                   foreach ($f in 'universal-update-manager.ps1', 'update-manager-gui.ps1') {
                       $bytes = [IO.File]::ReadAllBytes($f)
                       $hatBom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
-                      $text = [Text.UTF8Encoding]::new($hatBom).GetString($bytes)
+                      # GetString(mappt die BOM-Bytes AUF U+FEFF, die Flagge
+                      # gilt nur beim Schreiben). Ohne Abschneiden landete bei
+                      # jedem Anheben ein ZWEITES BOM in der Datei, und Windows
+                      # PowerShell 5.1 brach beim Parsen ab - im Setup-Lauf
+                      # 45817653148 (26.11.2026) als Parse-Fehler an gui.ps1:49.
+                      $text = [Text.UTF8Encoding]::new($false).GetString($bytes)
+                      if ($hatBom -and $text.Length -gt 0 -and [int]$text[0] -eq 0xFEFF) { $text = $text.Substring(1) }
                       $neu = [regex]::Replace($text, "(?m)^(\`$UpdaterVersion\s*=\s*')[^']+(')", "`${1}$version`$2")
                       if ($neu -ceq $text) { throw "${f}: `$UpdaterVersion ließ sich nicht auf $version anheben" }
                       [IO.File]::WriteAllText((Resolve-Path $f), $neu, [Text.UTF8Encoding]::new($hatBom))
