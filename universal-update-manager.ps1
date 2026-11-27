@@ -719,31 +719,39 @@ if ($UILang -eq "de") {
 # ============================================
 
 $ErrorActionPreference = "Continue"
+
+# ENV-Validierung VOR dem ersten Pfad: Ohne ProgramData und TEMP stimmt
+# keiner der Pfade unten, und der Lauf wuerde halb laufen und still enden.
+# Lieber laut abbrechen (Code 4) als still weiterlaufen.
+#
+# Ohne Write-Log (Senior-Befund zu diesem PR): Die Funktion steht erst weiter
+# unten, ein Aufruf hier waere CommandNotFound und die Protokollzeile waere
+# verloren. $LogFile steht hier auch noch nicht. Der Block traegt deshalb
+# seine Protokollzeile selbst: Write-Host auf die Konsole, Add-Content auf
+# den Pfad aus CommonApplicationData, sonst bleibt nur die Konsole als Spur.
+function Merke-UmgebungsAbbruch {
+    param([string]$Name)
+    $nachricht = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [ERROR] Umgebungsvariable $Name ist nicht gesetzt - Abbruch."
+    Write-Host $nachricht -ForegroundColor Red
+    try {
+        $sicherung = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'UpdateManager\universal-update-manager.log'
+        if ($sicherung -and $sicherung -ne '\universal-update-manager.log') {
+            Add-Content -Path $sicherung -Value $nachricht -Encoding UTF8 -ErrorAction SilentlyContinue
+        }
+    } catch { }
+}
+foreach ($n in 'ProgramData', 'TEMP') {
+    if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($n))) {
+        Merke-UmgebungsAbbruch $n
+        exit 4
+    }
+}
+
 # Ueber die Umgebungsvariable, nicht ueber den Laufwerksbuchstaben: Auf einer
 # Maschine mit System auf D: oder umgelegtem ProgramData zeigte der feste Pfad
 # ins Leere, und das Protokoll waere still verschwunden.
 $LogDir    = Join-Path $env:ProgramData "UpdateManager"
 $LogFile   = "$LogDir\universal-update-manager.log"
-
-# ENV-Validierung vor dem ersten Schritt: Ohne ProgramData und TEMP stimmt
-# keiner der Pfade unten, und der Lauf wuerde halb laufen und still enden.
-# Lieber laut abbrechen (Code 4) als still weiterlaufen.
-foreach ($n in 'ProgramData', 'TEMP') {
-    if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($n))) {
-        Write-Log "Umgebungsvariable $n ist nicht gesetzt - Abbruch." "ERROR"
-        exit 4
-    }
-}
-try {
-    # CommonApplicationData, nicht "ProgramData": Der Enum-Name von .NET
-    # kennt kein ProgramData (der Versuch wirft). $env:ProgramData bleibt
-    # die richtige Quelle fuer den Pfad, hier geht es nur um den Test.
-    [void][Environment]::GetFolderPath('CommonApplicationData')
-} catch {
-    # Ohne Write-Log (erst weiter unten definiert): laut und direkt.
-    Write-Host "ProgramData nicht erreichbar - Abbruch." -ForegroundColor Red
-    exit 4
-}
 
 # Der Name der geplanten Aufgabe steht an mehreren Stellen; eine
 # Umbenennung soll genau eine Zeile sein.
