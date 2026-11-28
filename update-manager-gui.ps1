@@ -554,6 +554,36 @@ $xamlText = @'
       <TextBlock x:Name="TxtErgebnisZeit" Text="" FontSize="12" Margin="0,3,0,0" TextWrapping="Wrap"
                  Foreground="{StaticResource SchriftLei}"/>
     </StackPanel>
+    <!-- Fehler an die Entwicklung melden: erscheint nur nach einem Lauf mit
+         Fehlern. Kein Popup: Die Frage steht hier im Fenster, mit dem
+         Umschalter fuer das Protokoll (Vorgabe ja) und einer Bestaetigung. -->
+    <StackPanel x:Name="PanelFehlerMelden" Visibility="Collapsed" Margin="2,0,0,14">
+      <TextBlock Text="__T_fehler_melden_knopf__" FontSize="14" FontWeight="SemiBold"
+                 Foreground="{StaticResource Schrift}"/>
+      <CheckBox x:Name="ChkFehlerMeldenLog" Style="{StaticResource Schalter}" Tag="&#xE8A5;" IsChecked="True"
+                Content="__T_fehler_melden_umschalter__"/>
+      <TextBlock Text="__T_fehler_melden_hinweis__" FontSize="12" Foreground="{StaticResource SchriftLei}"
+                 TextWrapping="Wrap" Margin="0,2,0,0"/>
+      <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+        <Button x:Name="BtnFehlerMeldenSenden" Style="{StaticResource KnopfLeise}"
+                AutomationProperties.Name="__T_fehler_melden_senden__">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE798;"/>
+            <TextBlock x:Name="TxtBtnFehlerMeldenSenden" Text="__T_fehler_melden_senden__" Margin="8,0,0,0"
+                       VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+          </StackPanel>
+        </Button>
+        <Button x:Name="BtnFehlerMeldenAbbrechen" Style="{StaticResource KnopfLeise}" Margin="12,0,0,0">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Style="{StaticResource SymbolKnopf}" Text="&#xE711;"/>
+            <TextBlock x:Name="TxtBtnFehlerMeldenAbbrechen" Text="__T_abbrechen__" Margin="8,0,0,0"
+                       VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+          </StackPanel>
+        </Button>
+      </StackPanel>
+      <TextBlock x:Name="TxtFehlerMeldenStatus" Text="" FontSize="12" Margin="0,4,0,0"
+                 TextWrapping="Wrap" Foreground="{StaticResource SchriftLei}"/>
+    </StackPanel>
     <!-- Die Schalter stehen vorbelegt auf "alles" und sind selten anzufassen:
          zu, bis jemand sie sucht. -->
     <StackPanel x:Name="PanelEinstellungen" Visibility="Collapsed" Margin="0,0,0,12">
@@ -845,6 +875,7 @@ foreach ($name in @('TxtHardware','TxtLetzterLauf','LinkMelucio','ChkWinget','Ch
                     'PanelEinstellungen','KarteErgebnis','StreifenErgebnis','TxtZahl','TxtErgebnis','TxtErgebnisZeit','PanelDetails',
                     'TxtIconErgebnis','KachelEinstellungen','KachelVerlauf','KachelProtokolle','TxtBtnFilterFehler',
                     'BtnFilterAlles','BtnFilterFehler',
+                    'PanelFehlerMelden','ChkFehlerMeldenLog','BtnFehlerMeldenSenden','BtnFehlerMeldenAbbrechen','TxtFehlerMeldenStatus',
                     'PanelVerlauf', 'RtfProtokoll',
                     'ChkSelbstPruefen', 'BtnSpracheDe', 'BtnSpracheEn', 'TxtSelbstUpdate', 'TxtBtnStart',
                     'TxtLetztePruefung')) {
@@ -930,6 +961,7 @@ function Setze-Beschaeftigt {
                               elseif ($Gut)  { $fenster.FindResource('Gut') }
                               else           { $fenster.FindResource('SchriftLei') }
     foreach ($n in @('BtnStart','BtnPruefen','BtnProtokoll','BtnSchliessen','BtnZeit',
+                     'BtnFehlerMeldenSenden','BtnFehlerMeldenAbbrechen','ChkFehlerMeldenLog',
                      'BtnFilterAlles','BtnFilterFehler','TxtZeit',
                      'KachelEinstellungen','KachelVerlauf','KachelProtokolle',
                      'ChkWinget','ChkChoco','ChkWindows','ChkStore','ChkTreiber',
@@ -1355,6 +1387,26 @@ $E.BtnPruefen.Add_Click({
     Fuehre-Sicher-Aus -Was 'Nachsehen' -Tun { Starte-Nachsehen }
 })
 
+# Fehler an die Entwicklung melden. Der Weg laeuft durch den Kern
+# (-FehlerMelden), keine zweite Logik im Fenster. Der Umschalter entscheidet,
+# ob das maskierte Protokoll-Ende mitgeht; bewusst bestaetigt wird mit dem
+# Knopf selbst (Vorgabe des Umschalters: ja).
+$E.BtnFehlerMeldenSenden.Add_Click({
+    $argumente = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$Kern`"",'-FehlerMelden')
+    if ($E.ChkFehlerMeldenLog.IsChecked) { $argumente += '-MitLog' }
+    if ($Sprache) { $argumente += @('-Sprache', $Sprache) }
+    try {
+        $prozess = Start-Process -FilePath $ExePfad -WindowStyle Hidden -Wait -PassThru -ArgumentList $argumente
+        $E.TxtFehlerMeldenStatus.Text = if ($prozess.ExitCode -eq 0) { $T['fehler_melden_gesendet'] } else { $T['fehler_melden_gesendet_nein'] }
+    } catch {
+        $E.TxtFehlerMeldenStatus.Text = $T['fehler_melden_gesendet_nein']
+    }
+})
+$E.BtnFehlerMeldenAbbrechen.Add_Click({
+    $E.PanelFehlerMelden.Visibility = 'Collapsed'
+    $E.TxtFehlerMeldenStatus.Text = ''
+})
+
 # Proaktive Pruefung (Feldtest 26.11.2026, Punkt 2): Beim Oeffnen sieht der
 # Manager einmal selbst nach, ohne dass jemand einen Knopf drueckt. Installiert
 # wird dabei nichts, es gilt dieselbe Klicksperre wie bei jedem Lauf.
@@ -1688,6 +1740,9 @@ function Zeige-LetztenLaufKarte {
 # Nach einem Lauf im Fenster: Zahl aus der Ausgabe, sonst Haken oder Ausrufezeichen.
 function Zeige-LaufErgebnis {
     param($Schluss, [string]$Art, [int]$Anzahl, [double]$Minuten)
+    # Der Melde-Weg steht nur nach einem Lauf mit Fehlern im Fenster, nicht
+    # nach einem sauberen Lauf (sonst liest man ihn ueber).
+    $E.PanelFehlerMelden.Visibility = if (-not $Schluss.Gut) { 'Visible' } else { 'Collapsed' }
     if ($Schluss.Gut) {
         if ($Art -eq 'pruefen') {
             # A green check can hide urgency: security updates are pending,

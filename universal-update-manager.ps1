@@ -79,7 +79,18 @@ param(
     # chronologisch, weil andere Stellen sie so lesen (der Tagesmarker des
     # stillen Laufs, die Kuerzung nach Zeit); angezeigt wird eine Kopie.
     # Aendert nichts am System und braucht keine Rechte.
-    [switch]$ProtokollAnzeigen
+    [switch]$ProtokollAnzeigen,
+
+    # Fehlermeldung aus der Oberflaeche: Grund, Version und (wenn der Nutzer
+    # zugestimmt hat) das maskierte Protokoll-Ende gehen an den bestehenden
+    # Push-Dienst der Leitstelle, danach beendet sich das Skript sofort.
+    # Kein Menue, kein Lauf, keine Rechte noetig.
+    # Exit 0: gesendet. Exit 6: gescheitert (Fenster zeigt den Fehler an).
+    [switch]$FehlerMelden,
+
+    # Ob das Protokoll-Ende mit der Fehlermeldung mitgeht. Vorgabe: nein;
+    # die Oberflaeche setzt den Umschalter auf ja und der Nutzer bestaetigt.
+    [switch]$MitLog
 )
 
 # Die erste Zeile, die laeuft: Von hier bis zum Start des Prozesses reicht
@@ -327,6 +338,9 @@ if ($UILang -eq "de") {
         "push_ohne_adresse"     = "Benachrichtigung ist eingeschaltet, aber ohne Adresse - es geht nichts raus"
         "push_ohne_zugang"      = "Benachrichtigung ist eingeschaltet, aber die Zugangsdatei fehlt"
         "push_fehler"           = "Benachrichtigung fehlgeschlagen"
+        "fehler_melden_titel"   = "Update-Manager: Fehlermeldung"
+        "fehler_melden_log_kopf" = "Protokoll-Ende (maskiert):"
+        "fehler_melden_grund"   = "Fehlermeldung aus der Oberflaeche"
         "job_fehler"            = "Abfrage fehlgeschlagen"
         "job_grenze"            = "Zeitgrenze"
         "zeit_start"            = "Start dauerte"
@@ -628,6 +642,9 @@ if ($UILang -eq "de") {
         "push_ohne_adresse"     = "Notification is enabled but has no address - nothing is sent"
         "push_ohne_zugang"      = "Notification is enabled but the credentials file is missing"
         "push_fehler"           = "Notification failed"
+        "fehler_melden_titel"   = "Update manager: error report"
+        "fehler_melden_log_kopf" = "End of log (masked):"
+        "fehler_melden_grund"   = "Error report from the user interface"
         "job_fehler"            = "Query failed"
         "job_grenze"            = "time limit"
         "zeit_start"            = "start took"
@@ -724,6 +741,12 @@ $ErrorActionPreference = "Continue"
 # ins Leere, und das Protokoll waere still verschwunden.
 $LogDir    = Join-Path $env:ProgramData "UpdateManager"
 $LogFile   = "$LogDir\universal-update-manager.log"
+# Strukturiertes App-Log (JSONL) neben dem Lesbar-Protokoll. Jede Zeile des
+# Protokolls steht dort als maschinenlesbares Ereignis (ts, version, level,
+# ereignis, meldung), damit Start, Version, Update-Schritte und Fehler sich
+# zuverlaessig auslesen lassen - z.B. fuer die Fehlermeldung an die Leitstelle.
+$AppLogDatei    = "$LogDir\app-log.jsonl"
+$AppLogMaxBytes = 1MB
 # Der Name der geplanten Aufgabe steht an mehreren Stellen; eine
 # Umbenennung soll genau eine Zeile sein.
 $AufgabeName     = "UpdateManager-SilentMode"
@@ -790,6 +813,7 @@ function Repair-LogKodierung {
 
 . "$PSScriptRoot\protokoll-kurz.ps1"
 . "$PSScriptRoot\bios-stand.ps1"
+. "$PSScriptRoot\leitstelle-meldeweg.ps1"
 
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
@@ -797,6 +821,13 @@ function Write-Log {
     # Jede Zeile merkt sich der Lauf fuer die Uebersicht (protokoll-kurz.ps1),
     # auch die, die nicht in die Datei kommen.
     [void]$Global:LaufZeilen.Add([pscustomobject]@{ Level = $Level; Text = $Message; Quelle = $Global:LogQuelle })
+    # Dasselbe Ereignis steht strukturiert im App-Log (Zusatz: fehlt die
+    # Funktion, bleibt es beim Textprotokoll).
+    if (-not (Test-ProtokollRauschen -Message $Message -Level $Level)) {
+        if (Get-Command Write-AppLog -ErrorAction SilentlyContinue) {
+            Write-AppLog -Message $Message -Level $Level
+        }
+    }
     # UTF-8, nicht die Windows-Vorgabe. Add-Content schreibt in Windows
     # PowerShell 5.1 sonst ANSI, und dann steht im Protokoll ein einzelnes
     # Byte fuer "ü" - jeder Editor, der UTF-8 erwartet, zeigt dort ein
@@ -813,6 +844,84 @@ function Write-Log {
         "INFO"    { Write-Host $Message -ForegroundColor $ColorInfo }
         default   { Write-Host $Message }
     }
+}
+
+function Maskiere-LogText {
+    <#
+        Personenbezogene Daten aus einer Protokollzeile ziehen, BEVOR sie in
+        das App-Log oder in eine Meldung an die Leitstelle geht (Weg C).
+
+        Was gemaessigt wird: der Windows-Benutzername in Pfaden
+        (C:\Users\name), E-Mail-Adressen und der Rechnername. Technische
+        Fakten (Versionen, Fehlermeldungen, Paketnamen) bleiben stehen - ein
+        maskiertes Protokoll, das nichts mehr sagt, ist nutzlos.
+    #>
+    param([string]$Text)
+    if (-not $Text) { return $Text }
+    # Benutzerordner, Windows- und deutscher Schreibweise
+    $Text = [regex]::Replace($Text, '(?i)((?:users|benutzer)\\)[^\\\s:"]+', '$1<maskiert>')
+    # E-Mail-Adressen
+    $Text = [regex]::Replace($Text, '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', '<maskiert>')
+    # Rechnername, wo er als Wort steht
+    if ($env:COMPUTERNAME) {
+        $Text = [regex]::Replace($Text, [regex]::Escape($env:COMPUTERNAME), '<maskiert>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    }
+    return $Text
+}
+
+function Write-AppLog {
+    <#
+        Strukturiertes, rotierendes App-Log (app-log.jsonl). Jedes Protokoll-
+        ereignis als eine JSON-Zeile: Start, Version, Update-Schritte, Fehler.
+        Rotation nach Groesse (ab 1 MB eine Stufe weit nach .old), damit der
+        Maschinenordner nicht waechst; das Lesbar-Protokoll bleibt unberuehrt.
+    #>
+    param([string]$Message, [string]$Level = "INFO", [string]$Ereignis = "lauf")
+
+    try {
+        if ((Test-Path $AppLogDatei) -and (Get-Item $AppLogDatei).Length -gt $AppLogMaxBytes) {
+            Move-Item -Path $AppLogDatei -Destination "$AppLogDatei.old" -Force -ErrorAction SilentlyContinue
+        }
+        $eintrag = [pscustomobject]@{
+            ts      = (Get-Date -Format 'yyyy-MM-ddTHH:mm:ss')
+            version = $UpdaterVersion
+            level   = $Level
+            ereignis = $Ereignis
+            meldung = (Maskiere-LogText $Message)
+        }
+        # UTF-8 wie beim Lesbar-Protokoll (siehe Write-Log: 5.1 schreibt sonst ANSI).
+        Add-Content -Path $AppLogDatei -Value ($eintrag | ConvertTo-Json -Compress) -Encoding UTF8 -ErrorAction SilentlyContinue
+    } catch {
+        # Ein misslungenes App-Log darf den Lauf nicht kippen; es steht im
+        # Lesbar-Protokoll ohnehin alles noch einmal.
+    }
+}
+
+function Send-Fehlermeldung {
+    <#
+        Fehlermeldung an die Leitstelle. WEG 1 ist die Tafel im Portal
+        (Send-TafelMeldung: POST /api/leitstelle/intern/meldungen wie bei
+        den Wachen, Welle 3). Scheitert der Portal-Weg, faellt der
+        BESTEHENDE Push-Weg ein (Send-Meldung, ntfy - dieselbe Anbindung
+        wie der stille Lauf). Der Nutzer bestaetigt in der Oberflaeche, ob
+        das Protokoll mitgeht; hier kommt nur an, wozu er ja gesagt hat.
+        Das Protokoll-Ende wird vorher maskiert (Maskiere-LogText, Weg C).
+    #>
+    param([string]$Grund = "", [switch]$MitLog)
+
+    $text = New-Object System.Text.StringBuilder
+    if ($Grund) { [void]$text.AppendLine($Grund); [void]$text.AppendLine("") }
+    [void]$text.AppendLine("Version: $UpdaterVersion")
+    [void]$text.AppendLine("")
+    if ($MitLog -and (Test-Path $LogFile)) {
+        [void]$text.AppendLine($T['fehler_melden_log_kopf'])
+        $zeilen = Get-Content -Path $LogFile -Tail 40 -Encoding UTF8 -ErrorAction SilentlyContinue
+        foreach ($z in $zeilen) { [void]$text.AppendLine((Maskiere-LogText $z)) }
+    }
+    # WEG 1: die Tafel im Portal (wie die Wachen sie beschreiben). Ging sie
+    # nicht (kein ssh, kein Token), bleibt der alte ntfy-Kanal als zweiter Weg.
+    if (Send-TafelMeldung -Text $text.ToString().TrimEnd()) { return $true }
+    return (Send-Meldung -Titel $T['fehler_melden_titel'] -Text $text.ToString().TrimEnd())
 }
 
 function Get-LaufExitCode {
@@ -3262,6 +3371,10 @@ function Invoke-LogPflege {
 }
 
 try {
+    # App-Log: Der Start-Eintrag steht vor allem anderen, mit der Version.
+    # Jedes weitere Ereignis kommt ueber Write-Log hier an.
+    Write-AppLog -Message "Update-Manager gestartet" -Level "INFO" -Ereignis "start"
+
     # ZUERST, ohne Protokoll und ohne Vorbereitung: Diese Ausgabe liest ein
     # anderes Programm, und zwischen Anfrage und Antwort gehoert nichts als
     # die Antwort. Sie aendert nichts und braucht keine Rechte.
@@ -3273,6 +3386,16 @@ try {
     # Nur lesen und anzeigen, ohne Rechte und ohne Pflege der Datei.
     if ($ProtokollAnzeigen) {
         if (Show-Protokoll) { exit 0 } else { exit 1 }
+    }
+
+    if ($FehlerMelden) {
+        # Fehlermeldung aus der Oberflaeche an die Leitstelle (bestehender
+        # Push-Weg). Kein Menue, kein Lauf, nichts am System geaendert, keine
+        # Rechte noetig - darum wie die reinen Abfragen VOR der Rechtepruefung.
+        # Die Bestaetigung, ob das Protokoll mitgeht, ist Sache der Oberflaeche.
+        $Global:Config = Get-UpdateConfig
+        if (Send-Fehlermeldung -Grund $T['fehler_melden_grund'] -MitLog:$MitLog) { exit 0 }
+        exit 6
     }
 
     # Alles ausser der reinen Abfrage oben aendert etwas am System und

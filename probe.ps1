@@ -51,6 +51,9 @@
       9cb. Sicherheitsrelevante Kennzeichnung: nur, wo die Quelle es selbst sagt.
       9d. Zeitgrenze beendet den ganzen Prozessbaum und sagt, was sie mass.
       9e. Das Protokoll haelt sieben Tage.
+     10. App-Log und Fehlermeldung: Maskierung (Weg C), JSONL mit Rotation,
+                     Meldeweg mit Umschalter (Protokoll ja/nein), Fenster geht
+                     durch den Kern (-FehlerMelden), keine zweite Logik.
 
     AUFRUF
       pwsh -File probe.ps1            (auch Windows PowerShell 5.1 geht)
@@ -2074,6 +2077,135 @@ if (Test-Path $Sprach) {
     else { Schlecht "Statuszeile bleibt neben der Fassungszeile stehen: '$leer14'" }
 } else {
     Schlecht 'gui-sprache.ps1 fehlt fuer die Einstellungs-Pruefung (Sektion 14)'
+}
+
+# ── 10. App-Log und Fehlermeldung ───────────────────────────────────────────
+# 10a. Maskierung (Weg C): Nutzername in Pfaden, E-Mail und Rechnername
+#      verschwinden, technische Fakten bleiben stehen.
+# 10b. App-Log: JSONL mit ts/version/level/ereignis/meldung, Rotation ab Limit.
+# 10c. Send-Fehlermeldung: Protokoll-Ende nur mit Umschalter, immer maskiert.
+# 10d. Der Fenster-Weg fuehrt durch den Kern (-FehlerMelden), es gibt keinen
+#      zweiten Meldeweg im Fenster.
+if (Test-Path $Kern) {
+    $fn10 = Hole-Funktion $Kern @('Maskiere-LogText', 'Write-AppLog', 'Send-Fehlermeldung')
+    if (-not $fn10) {
+        Schlecht 'Fehlermeldung: Funktionen fehlen im Kern (Maskiere-LogText, Write-AppLog, Send-Fehlermeldung)'
+    } else {
+        $temp10 = Join-Path ([System.IO.Path]::GetTempPath()) ("um-applog-{0}" -f [guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Path $temp10 | Out-Null
+        try {
+            $probe10 = @"
+`$LogDir         = '$temp10'
+`$AppLogDatei    = Join-Path `$LogDir 'app-log.jsonl'
+`$AppLogMaxBytes = 300          # absichtlich klein, damit die Rotation eintritt
+`$UpdaterVersion = '9.9.9'
+`$LogFile        = Join-Path `$LogDir 'universal-update-manager.log'
+`$T = @{ fehler_melden_titel = 'PROBE-TITEL'; fehler_melden_log_kopf = 'PROBE-KOPF' }
+`$env:COMPUTERNAME = 'PROBE-MASCHINE'
+. '$Ordner\leitstelle-meldeweg.ps1'
+function Test-ProtokollRauschen { param(`$Message, `$Level) `$false }
+`$script:Gesendet10 = `$null
+function Send-Meldung {
+    param(`$Titel, `$Text, `$Prio = 4, `$Tags = 'warning,gear')
+    `$script:Gesendet10 = [pscustomobject]@{ Titel = `$Titel; Text = `$Text }
+    return `$true
+}
+$fn10
+
+# 10a Maskierung
+`$maskiert = Maskiere-LogText 'Lauf von C:\Users\elke gestartet, Rueckfrage an elke@example.com auf PROBE-MASCHINE, winget 1.11.400'
+`$script:Mask10 = `$maskiert
+
+# 10b App-Log: Struktur
+Write-AppLog -Message 'Update-Manager gestartet' -Level 'INFO' -Ereignis 'start'
+Write-AppLog -Message 'winget: 3 Pakete offen' -Level 'WARNING'
+`$zeilen10 = @(Get-Content -Path `$AppLogDatei -Encoding UTF8)
+`$script:Json10 = @(`$zeilen10 | ForEach-Object { `$_ | ConvertFrom-Json })
+
+# 10b App-Log: Rotation (Limit 300 Byte, jede Zeile ueber 100 Byte)
+1..4 | ForEach-Object { Write-AppLog -Message "Schritt `$_ mit ein bisschen Text, damit das Limit greift" }
+`$script:Rot10 = [pscustomobject]@{
+    AltDa   = (Test-Path (`$AppLogDatei + '.old'))
+    NeuDa   = (Test-Path `$AppLogDatei)
+    AltLeer = -not (Get-Content -Path (`$AppLogDatei + '.old') -Encoding UTF8 -ErrorAction SilentlyContinue)
+}
+
+# 10c Meldung OHNE Protokoll
+Set-Content -Path `$LogFile -Value '[2026-11-28 04:00:00] [ERROR] C:\Users\elke: winget fehlgeschlagen (elke@example.com)' -Encoding UTF8
+`$script:Gesendet10 = `$null
+`$script:OhneLog10 = Send-Fehlermeldung -Grund 'PROBE-GRUND'
+`$script:OhneLogText10 = if (`$script:Gesendet10) { `$script:Gesendet10.Text } else { '' }
+
+# 10c Meldung MIT Protokoll
+`$script:Gesendet10 = `$null
+`$script:MitLog10 = Send-Fehlermeldung -Grund 'PROBE-GRUND' -MitLog
+`$script:MitLogText10 = if (`$script:Gesendet10) { `$script:Gesendet10.Text } else { '' }
+"@
+            Invoke-Expression $probe10
+
+            # 10a
+            if ($Mask10 -match 'elke' -or $Mask10 -match 'PROBE-MASCHINE' -or $Mask10 -match 'example\.com') {
+                Schlecht "Maskierung laesst personenbezogene Daten durch: '$Mask10'"
+            } elseif ($Mask10 -notmatch 'winget 1\.11\.400') {
+                Schlecht "Maskierung nimmt technische Fakten mit: '$Mask10'"
+            } else {
+                Melde 'ok' 'Maskierung: Nutzername, E-Mail und Rechnername weg, Fakten bleiben'
+            }
+
+            # 10b
+            if ($Json10.Count -ge 2 -and
+                $Json10[0].version -eq '9.9.9' -and $Json10[0].ereignis -eq 'start' -and
+                $Json10[1].level -eq 'WARNING' -and $Json10[1].meldung -match 'winget') {
+                Melde 'ok' 'App-Log: JSONL mit ts, version, level, ereignis, meldung'
+            } else {
+                Schlecht "App-Log: Struktur stimmt nicht (Muster: $($Json10[0] | ConvertTo-Json -Compress))"
+            }
+            if ($Rot10.AltDa -and $Rot10.NeuDa -and -not $Rot10.AltLeer) {
+                Melde 'ok' 'App-Log: Rotation schreibt die volle Datei nach .old und beginnt neu'
+            } else {
+                Schlecht "App-Log: Rotation greift nicht (alt=$($Rot10.AltDa), leer=$($Rot10.AltLeer))"
+            }
+
+            # 10c
+            if (-not $OhneLog10) { Schlecht 'Fehlermeldung ohne Protokoll schlug fehl (Send-Meldung-Attrap)' }
+            elseif ($OhneLogText10 -match 'elke|C:\\Users') {
+                Schlecht 'Fehlermeldung schickt Protokoll, obwohl der Umschalter aus ist'
+            } else { Melde 'ok' 'Fehlermeldung ohne Protokoll: kein Protokollinhalt in der Meldung' }
+
+            if (-not $MitLog10) { Schlecht 'Fehlermeldung mit Protokoll schlug fehl (Send-Meldung-Attrap)' }
+            elseif ($MitLogText10 -match 'elke|example\.com') {
+                Schlecht 'Fehlermeldung schickt unmaskierte Protokollzeilen'
+            } elseif ($MitLogText10 -notmatch '<maskiert>') {
+                Schlecht "Fehlermeldung mit Protokoll enthaelt keine Protokollzeile: '$MitLogText10'"
+            } else { Melde 'ok' 'Fehlermeldung mit Protokoll: Zeilen kommen an und sind maskiert' }
+        } catch {
+            Schlecht "App-Log/Fehlermeldung: Probe fiel um ($($_.Exception.Message))"
+        } finally {
+            Remove-Item -Path $temp10 -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        # 10d: Der Kern kennt -FehlerMelden, das Fenster baut ihn ein; und der
+        # Kern nimmt die Tafel im Portal als WEG 1 und ntfy als ZWEITEN Weg.
+        $kernText10 = Get-Content $Kern -Raw
+        if ($kernText10 -match '\[switch\]\$FehlerMelden' -and $kernText10 -match 'Send-Fehlermeldung -Grund') {
+            Melde 'ok' 'Kern nimmt -FehlerMelden entgegen'
+        } else {
+            Schlecht 'Kern: -FehlerMelden oder Send-Fehlermeldung fehlt im Dispatch'
+        }
+        if ($kernText10 -match 'Send-TafelMeldung -Text' -and $kernText10 -match 'Send-Meldung -Titel') {
+            Melde 'ok' 'Meldeweg: Tafel im Portal ist Weg 1, ntfy bleibt zweiter Weg'
+        } else {
+            Schlecht 'Meldeweg: Portal-Weg fehlt oder ntfy ist abgeschaltet statt zweiter Weg'
+        }
+        if (Test-Path $Gui) {
+            $guiText10 = Get-Content $Gui -Raw
+            if ($guiText10 -match "'-FehlerMelden'" -and $guiText10 -notmatch 'function Send-Meldung') {
+                Melde 'ok' 'Fenster meldet ueber den Kern, keine zweite Logik'
+            } else {
+                Schlecht 'Fenster: -FehlerMelden fehlt oder es gibt eine zweite Sendelogik'
+            }
+        }
+    }
 }
 
 Write-Host ""

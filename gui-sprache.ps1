@@ -174,6 +174,15 @@ $script:GuiTabelleDe = @{
     "schliessen"             = "Schließen"
     "nur_nachsehen"          = "Nur nachsehen"
     "aktualisieren"          = "Aktualisieren"
+
+    # Fehler an die Entwicklung melden (erscheint nach einem Lauf mit Fehlern)
+    "fehler_melden_knopf"    = "Fehler an die Entwicklung melden"
+    "fehler_melden_umschalter" = "Protokoll mitschicken (empfohlen)"
+    "fehler_melden_hinweis"  = "Personenbezogene Daten im Protokoll (Nutzername, E-Mail-Adresse, Rechnername) werden vorher maskiert."
+    "fehler_melden_senden"   = "Melden"
+    "fehler_melden_gesendet" = "Danke. Die Meldung ist an die Leitstelle unterwegs."
+    "fehler_melden_gesendet_nein" = "Die Meldung ließ sich nicht schicken. Sie steht trotzdem im Protokoll."
+    "abbrechen"              = "Abbrechen"
 }
 
 $script:GuiTabelleEn = @{
@@ -318,6 +327,15 @@ $script:GuiTabelleEn = @{
     "schliessen"             = "Close"
     "nur_nachsehen"          = "Check only"
     "aktualisieren"          = "Update"
+
+    # Report an error to development (appears after a run with errors)
+    "fehler_melden_knopf"    = "Report this error to the developers"
+    "fehler_melden_umschalter" = "Attach the log (recommended)"
+    "fehler_melden_hinweis"  = "Personal data in the log (user name, email address, computer name) is masked beforehand."
+    "fehler_melden_senden"   = "Report"
+    "fehler_melden_gesendet" = "Thank you. The report is on its way to the control center."
+    "fehler_melden_gesendet_nein" = "The report could not be sent. It remains in the log."
+    "abbrechen"              = "Cancel"
 }
 
 function Get-GuiSprachTabelle {
